@@ -1,0 +1,47 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>ESP32-S3 PWM + RPM</title>
+  <link rel="stylesheet" href="/app.css" />
+</head>
+<body>
+  <h1>ESP32-S3 PWM + RPM</h1>
+
+  <section class="panel">
+    <h2>PWM</h2>
+    <label>Frequency (Hz)
+      <input id="freq" type="number" min="1" max="1000000" value="1000" />
+    </label>
+    <label>Duty (%)
+      <input id="duty" type="number" min="0" max="100" step="0.1" value="50" />
+    </label>
+    <button id="apply">Apply</button>
+    <div class="readout">
+      <span>Applied: <b id="applied">—</b></span>
+    </div>
+  </section>
+
+  <section class="panel">
+    <h2>RPM capture</h2>
+    <label>Pole count <input id="pole" type="number" min="1" value="2" /></label>
+    <label>Moving avg <input id="mavg" type="number" min="1" value="16" /></label>
+    <label>Timeout (µs) <input id="timeout_us" type="number" min="1000" value="1000000" /></label>
+    <button id="apply_rpm">Apply RPM</button>
+    <div class="readout">
+      <span>Current: <b id="rpm">—</b> RPM</span>
+    </div>
+    <canvas id="chart" width="600" height="200"></canvas>
+  </section>
+
+  <section class="panel">
+    <h2>OTA</h2>
+    <input id="fwfile" type="file" accept=".bin" />
+    <button id="upload">Upload &amp; reboot</button>
+    <progress id="otaprog" max="100" value="0"></progress>
+  </section>
+
+  <script src="/app.js"></script>
+</body>
+</html>

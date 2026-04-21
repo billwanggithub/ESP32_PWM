@@ -1,0 +1,9 @@
+:root { color-scheme: light dark; font-family: system-ui, sans-serif; }
+body { max-width: 720px; margin: 2em auto; padding: 0 1em; }
+h1 { margin-bottom: 0.2em; }
+.panel { border: 1px solid #8884; border-radius: 8px; padding: 1em; margin: 1em 0; }
+label { display: block; margin: 0.4em 0; }
+input[type=number] { width: 8em; margin-left: 0.5em; }
+button { margin-top: 0.6em; }
+.readout { margin-top: 0.5em; font-size: 1.05em; }
+#chart { display: block; margin-top: 0.6em; width: 100%; background: #0001; border-radius: 4px; }

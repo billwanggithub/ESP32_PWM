@@ -1,0 +1,14 @@
+## Managed components fetched by the ESP-IDF Component Manager on first build.
+## Docs: https://docs.espressif.com/projects/idf-component-manager/
+##
+## esp_tinyusb is pinned to the 1.7.x series intentionally. The 2.x rewrite
+## requires the application to hand-build a composite configuration
+## descriptor (tinyusb_desc_config_t.full_speed_config), while 1.x still
+## auto-generates the descriptor from Kconfig for the common HID+CDC case
+## that this firmware needs. If you upgrade to 2.x later, usb_composite.c
+## and usb_descriptors.c must both be rewritten.
+dependencies:
+  idf:
+    version: ">=5.5.0"
+  espressif/esp_tinyusb:
+    version: "~1.7.0"

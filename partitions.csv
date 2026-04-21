@@ -1,0 +1,13 @@
+# ESP32-S3-N16R8: 16 MB flash
+# Partition table offset is 0xE000 (pushed up to give Secure Boot V2 + Flash
+# Encryption room for the signed bootloader). Partition table itself occupies
+# 0xE000..0xF000. First usable offset is therefore 0x10000 (64 KB boundary).
+# Name,     Type, SubType,  Offset,   Size,     Flags
+nvs,        data, nvs,      0x10000,  0x6000,
+otadata,    data, ota,      0x16000,  0x2000,
+phy_init,   data, phy,      0x18000,  0x1000,
+factory,    app,  factory,  0x20000,  0x200000,
+ota_0,      app,  ota_0,    0x220000, 0x200000,
+ota_1,      app,  ota_1,    0x420000, 0x200000,
+nvs_keys,   data, nvs_keys, 0x620000, 0x1000,    encrypted
+spiffs,     data, spiffs,   0x621000, 0x100000,

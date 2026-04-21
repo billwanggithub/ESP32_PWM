@@ -1,0 +1,78 @@
+# Target
+CONFIG_IDF_TARGET="esp32s3"
+
+# Flash + PSRAM (N16R8 module)
+CONFIG_ESPTOOLPY_FLASHSIZE_16MB=y
+CONFIG_ESPTOOLPY_FLASHSIZE="16MB"
+CONFIG_SPIRAM=y
+CONFIG_SPIRAM_MODE_OCT=y
+CONFIG_SPIRAM_SPEED_80M=y
+CONFIG_SPIRAM_USE_MALLOC=y
+
+# Partition table
+# Secure Boot V2 + Flash Encryption grows the signed bootloader past the
+# default 0x8000 limit, so push the partition table offset to 0xE000
+# (56 KB of bootloader room, comfortable for v5.5 Secure Boot V2 + ~40 KB).
+# CONFIG_PARTITION_TABLE_TYPE is a choice; we must explicitly unset the
+# other members to override a previously-generated sdkconfig.
+CONFIG_PARTITION_TABLE_CUSTOM=y
+CONFIG_PARTITION_TABLE_SINGLE_APP=n
+CONFIG_PARTITION_TABLE_SINGLE_APP_LARGE=n
+CONFIG_PARTITION_TABLE_TWO_OTA=n
+CONFIG_PARTITION_TABLE_TWO_OTA_LARGE=n
+CONFIG_PARTITION_TABLE_CUSTOM_FILENAME="partitions.csv"
+CONFIG_PARTITION_TABLE_OFFSET=0xE000
+
+# FreeRTOS
+CONFIG_FREERTOS_HZ=1000
+CONFIG_FREERTOS_UNICORE=n
+
+# Logging (UART0 console via USB1 / CH343P)
+CONFIG_LOG_DEFAULT_LEVEL_INFO=y
+CONFIG_LOG_MAXIMUM_EQUALS_DEFAULT=y
+
+# Compiler
+CONFIG_COMPILER_OPTIMIZATION_PERF=y
+CONFIG_COMPILER_WARN_WRITE_STRINGS=y
+
+# OTA / Secure Boot / Flash Encryption
+# Development-mode defaults: key re-flashable, JTAG available.
+# Release hardening is documented in docs/release-hardening.md.
+CONFIG_BOOTLOADER_APP_ROLLBACK_ENABLE=y
+CONFIG_BOOTLOADER_APP_ANTI_ROLLBACK=n
+
+# Secure Boot V2 (RSA-PSS), development mode.
+CONFIG_SECURE_BOOT=y
+CONFIG_SECURE_BOOT_V2_ENABLED=y
+CONFIG_SECURE_SIGNED_APPS_RSA_SCHEME=y
+CONFIG_SECURE_BOOT_SIGNING_KEY="secure_boot_signing_key.pem"
+CONFIG_SECURE_BOOT_BUILD_SIGNED_BINARIES=y
+
+# Flash Encryption, development mode.
+CONFIG_SECURE_FLASH_ENC_ENABLED=y
+CONFIG_SECURE_FLASH_ENCRYPTION_MODE_DEVELOPMENT=y
+CONFIG_SECURE_BOOT_ALLOW_ROM_BASIC=n
+CONFIG_SECURE_BOOT_ALLOW_JTAG=y
+CONFIG_SECURE_BOOT_ALLOW_SHORT_APP_PARTITION=n
+
+# HTTPD / WebSocket
+CONFIG_HTTPD_WS_SUPPORT=y
+CONFIG_HTTPD_MAX_REQ_HDR_LEN=1024
+CONFIG_HTTPD_MAX_URI_LEN=512
+
+# TinyUSB (composite: HID + CDC) — esp_tinyusb 1.7.x Kconfig options.
+CONFIG_TINYUSB_HID_COUNT=1
+CONFIG_TINYUSB_CDC_ENABLED=y
+CONFIG_TINYUSB_CDC_COUNT=1
+
+# Bluetooth (BLE) for wifi_provisioning scheme_ble.
+# NimBLE chosen over Bluedroid for ~60 KB smaller flash footprint; after
+# provisioning completes, WIFI_PROV_SCHEME_BLE_EVENT_HANDLER_FREE_BTDM
+# releases the BT controller memory so it does not waste RAM at runtime.
+CONFIG_BT_ENABLED=y
+CONFIG_BT_BLUEDROID_ENABLED=n
+CONFIG_BT_NIMBLE_ENABLED=y
+CONFIG_BT_CONTROLLER_ENABLED=y
+
+# Power
+CONFIG_ESP_DEFAULT_CPU_FREQ_MHZ_240=y

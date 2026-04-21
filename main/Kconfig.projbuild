@@ -1,0 +1,31 @@
+menu "ESP32 PWM App"
+
+    config APP_PWM_OUTPUT_GPIO
+        int "PWM output GPIO"
+        default 4
+
+    config APP_PWM_TRIGGER_GPIO
+        int "PWM change-trigger output GPIO"
+        default 5
+
+    config APP_RPM_INPUT_GPIO
+        int "RPM capture input GPIO"
+        default 6
+
+    config APP_STATUS_LED_GPIO
+        int "Onboard status RGB LED GPIO (WS2812)"
+        default 48
+
+    config APP_DEFAULT_RPM_TIMEOUT_US
+        int "Default RPM timeout in microseconds (edge→0 RPM)"
+        default 1000000
+
+    config APP_DEFAULT_POLE_COUNT
+        int "Default motor pole count"
+        default 2
+
+    config APP_DEFAULT_MAVG_COUNT
+        int "Default RPM moving-average count"
+        default 16
+
+endmenu
