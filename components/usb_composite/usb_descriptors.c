@@ -48,6 +48,11 @@ const uint8_t usb_hid_report_descriptor[] = {
 
 const size_t usb_hid_report_descriptor_size = sizeof(usb_hid_report_descriptor);
 
+// usb_composite.c 的 TUD_HID_DESCRIPTOR() 要在 compile time 給 report desc
+// 的 byte length，所以用 static_assert 把它綁在 sizeof 上，避免兩邊漂移。
+_Static_assert(sizeof(usb_hid_report_descriptor) == 53,
+               "HID_REPORT_DESC_SIZE in usb_composite.c must match this size");
+
 // TinyUSB expects this specific callback name.
 uint8_t const *tud_hid_descriptor_report_cb(uint8_t instance)
 {
