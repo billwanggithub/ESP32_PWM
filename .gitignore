@@ -1,0 +1,23 @@
+# ESP-IDF build artefacts
+build/
+sdkconfig
+sdkconfig.old
+managed_components/
+dependencies.lock
+
+# IDE
+.vscode/
+.idea/
+*.swp
+
+# Claude Code runtime state (not config)
+.claude/scheduled_tasks.lock
+
+# Security (never commit)
+secure_boot_signing_key.pem
+*.pem
+*.key
+
+# OS
+.DS_Store
+Thumbs.db
