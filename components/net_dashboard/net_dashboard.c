@@ -21,7 +21,10 @@ static esp_err_t serve_embedded(httpd_req_t *req, const char *ct,
                                 const char *start, const char *end)
 {
     httpd_resp_set_type(req, ct);
-    return httpd_resp_send(req, start, end - start);
+    // EMBED_TXTFILES appends a trailing '\0' after the real content so the
+    // symbols form a C string; that NUL is *before* _end, so subtract one
+    // byte, otherwise browsers see a stray NUL and JS/CSS parsers choke.
+    return httpd_resp_send(req, start, end - start - 1);
 }
 
 static esp_err_t root_get(httpd_req_t *req)

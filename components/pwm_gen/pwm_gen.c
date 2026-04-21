@@ -10,7 +10,19 @@
 #include "freertos/FreeRTOS.h"
 #include "freertos/task.h"
 
-#define PWM_SRC_CLK_HZ 160000000u
+// MCPWM 的 timer counter 是 16-bit（MCPWM_LL_MAX_COUNT_VALUE = 0x10000），所以
+// period_ticks 必須 ∈ [2, 65535]。resolution_hz 是 driver 內部 prescaler 算完
+// 之後 counter 遞增的速率；為了在整個 freq 範圍都留合理 duty resolution，固定
+// resolution 為 10 MHz：
+//   1 MHz   → period=10       (3.3 bits duty)
+//   100 kHz → period=100      (6.6 bits)
+//   10 kHz  → period=1000     (10 bits)
+//   1 kHz   → period=10000    (13 bits)
+//   153 Hz  → period=65359    (16 bits，接近 period 上限)
+// freq 下限因此是 10e6/65535 ≈ 153 Hz。
+#define PWM_RESOLUTION_HZ 10000000u
+#define PWM_FREQ_MIN_HZ   153u
+#define PWM_FREQ_MAX_HZ   1000000u
 
 static const char *TAG = "pwm_gen";
 
@@ -30,7 +42,7 @@ static struct {
 static inline uint32_t freq_to_period_ticks(uint32_t freq_hz)
 {
     if (freq_hz == 0) return 0;
-    return PWM_SRC_CLK_HZ / freq_hz;
+    return PWM_RESOLUTION_HZ / freq_hz;
 }
 
 uint8_t pwm_gen_duty_resolution_bits(uint32_t freq_hz)
@@ -60,7 +72,7 @@ esp_err_t pwm_gen_init(const pwm_gen_config_t *cfg)
     mcpwm_timer_config_t timer_cfg = {
         .group_id      = 0,
         .clk_src       = MCPWM_TIMER_CLK_SRC_DEFAULT,
-        .resolution_hz = PWM_SRC_CLK_HZ,
+        .resolution_hz = PWM_RESOLUTION_HZ,
         .count_mode    = MCPWM_TIMER_COUNT_MODE_UP,
         .period_ticks  = s_pwm.period_ticks,
     };
@@ -109,11 +121,11 @@ esp_err_t pwm_gen_init(const pwm_gen_config_t *cfg)
 esp_err_t pwm_gen_set(uint32_t freq_hz, float duty_pct)
 {
     if (!s_pwm.initialised) return ESP_ERR_INVALID_STATE;
-    if (freq_hz == 0 || freq_hz > 1000000u) return ESP_ERR_INVALID_ARG;
+    if (freq_hz < PWM_FREQ_MIN_HZ || freq_hz > PWM_FREQ_MAX_HZ) return ESP_ERR_INVALID_ARG;
     if (duty_pct < 0.0f || duty_pct > 100.0f) return ESP_ERR_INVALID_ARG;
 
     uint32_t period = freq_to_period_ticks(freq_hz);
-    if (period < 2) return ESP_ERR_INVALID_ARG;
+    if (period < 2 || period > 65535) return ESP_ERR_INVALID_ARG;
 
     uint32_t compare = (uint32_t)lroundf((duty_pct / 100.0f) * (float)period);
     if (compare > period) compare = period;
