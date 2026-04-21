@@ -9,13 +9,23 @@ for provisioning) and from a PC host via USB composite (HID + CDC).
 The full design is in `C:\Users\billw\.claude\plans\read-the-project-plan-pure-eagle.md`.
 The release-hardening checklist is in `docs/release-hardening.md`.
 
+## Status (2026-04-22)
+
+Working on real hardware as of commit `be4a9ad`:
+Wi-Fi provisioning + HTTP dashboard + WebSocket + USB composite
+(HID + CDC) + PWM init + RPM init all verified end-to-end.
+
+Secure Boot V2 + Flash Encryption are **currently disabled** —
+they caused a boot loop on first power-on with the untouched eFuse set.
+Tracking in [HANDOFF.md](HANDOFF.md) Bug 1.
+
 ## First-time build (Windows 11)
 
 1. **Install the ESP-IDF Python venv** (one-off, because the current
    environment is Python 3.14 and IDF's venv for it is missing). Open a
    plain `cmd.exe` and run:
 
-   ```
+   ```bat
    C:\Espressif\frameworks\esp-idf-v5.5.1\install.bat esp32s3
    ```
 
@@ -27,31 +37,32 @@ The release-hardening checklist is in `docs/release-hardening.md`.
    - **PowerShell**: `C:\Espressif\frameworks\esp-idf-v5.5.1\export.ps1`
    - **Git Bash / MSYS2**: `source /c/Espressif/frameworks/esp-idf-v5.5.1/export.sh`
 
-3. **Generate a local Secure Boot V2 signing key** (gitignored):
+3. **Set target, build, flash**:
 
-   ```
-   espsecure.py generate_signing_key --version 2 secure_boot_signing_key.pem
-   ```
-
-4. **Set target, build**:
-
-   ```
+   ```bat
    cd D:\github\ESP32_PWM
    idf.py set-target esp32s3
    idf.py build
+   idf.py -p COM3 flash monitor
    ```
 
-   The first build pulls `espressif/esp_tinyusb ~1.7.0` from the component
-   registry (see `main/idf_component.yml`).
+   The first build pulls `espressif/esp_tinyusb ~1.7.0` from the
+   component registry (see `main/idf_component.yml`). Replace `COM3`
+   with what Windows Device Manager assigns to the CH343P bridge on
+   USB1.
 
-5. **Flash (first time uses encrypted-flash)**:
+### sdkconfig trap
 
-   ```
-   idf.py -p COM3 encrypted-flash monitor
-   ```
+`idf.py fullclean` wipes `build/` but **keeps `sdkconfig`**. Any change
+to `sdkconfig.defaults` for a Kconfig symbol already present in
+`sdkconfig` is silently ignored. When modifying partition layout,
+Secure Boot, Flash Encryption, or TinyUSB Kconfig run:
 
-   The CH343P bridge on USB1 enumerates as a COM port; replace `COM3`
-   with what Windows Device Manager assigns.
+```bat
+del sdkconfig
+idf.py fullclean
+idf.py build
+```
 
 ## Board jumper
 
@@ -75,12 +86,22 @@ All configurable under `idf.py menuconfig` -> *ESP32 PWM App*.
 
 ## Interacting with the device
 
-- **UART console** (USB1): commands `pwm <freq> <duty>`, `rpm_params <pole>
-  <mavg>`, `rpm_timeout <us>`, `status`, `help`.
-- **Web dashboard**: once BLE provisioned and joined to Wi-Fi, browse to
-  `http://<device-ip>/`.
-- **USB HID/CDC** (USB2): HID report IDs and CDC SLIP frame ops are defined
-  in `components/usb_composite/include/usb_protocol.h`.
+- **UART console** (USB1, CH343P): commands `pwm <freq> <duty>`,
+  `rpm_params <pole> <mavg>`, `rpm_timeout <us>`, `status`, `help`.
+  Baud rate is 115200.
+- **BLE provisioning** (NimBLE): on first boot the device advertises as
+  `ESP32-PWM`, PoP = `abcd1234`. Use the Espressif **ESP BLE
+  Provisioning** app (Android / iOS) to enter Wi-Fi credentials.
+  Credentials persist in NVS; subsequent boots skip provisioning and
+  reconnect automatically.
+- **Web dashboard** (Wi-Fi): once provisioned and online, browse to
+  `http://<device-ip>/`. PWM freq/duty Apply, RPM params, live status
+  (20 Hz WebSocket push), OTA upload form all work.
+- **USB HID/CDC** (USB2, native USB with jumper on **USB-OTG**): the
+  board enumerates as `USB Composite Device` → `HID-compliant
+  vendor-defined device` + `USB 序列裝置 (COMx)`. HID report IDs and
+  CDC SLIP frame ops are defined in
+  `components/usb_composite/include/usb_protocol.h`.
 
 ## Repository layout
 
@@ -96,5 +117,7 @@ components/
 docs/
   release-hardening.md     irreversible eFuse checklist
 partitions.csv             factory + ota_0 + ota_1 + spiffs + nvs(_keys)
-sdkconfig.defaults         target, PSRAM, Secure Boot V2 (dev), Flash Enc
+sdkconfig.defaults         target, PSRAM, BT/NimBLE, TinyUSB HID+CDC
+                           (Secure Boot + Flash Enc currently off;
+                            see HANDOFF.md Bug 1)
 ```

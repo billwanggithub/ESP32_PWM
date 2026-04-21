@@ -29,12 +29,17 @@ the Start-menu **"ESP-IDF 5.5.1 CMD"** shortcut (easiest), or
 `export.bat` / `export.ps1` from cmd/PowerShell. `export.sh` only works
 in Git Bash/MSYS2.
 
-```
+```bash
 idf.py set-target esp32s3     # once
 idf.py build
-idf.py -p COM3 encrypted-flash monitor    # first flash uses encrypted-flash
-idf.py -p COM3 flash monitor              # subsequent flashes
+idf.py -p COM3 flash monitor  # plain-text flash (current dev build has no Secure Boot)
 ```
+
+現階段 `sdkconfig.defaults` 把 `CONFIG_SECURE_BOOT` 跟
+`CONFIG_SECURE_FLASH_ENC_ENABLED` 都關掉 (temporary workaround)，所以
+**不要** 跑 `encrypted-flash` — 那是 eFuse 已經燒過 flash-enc key 之後
+的 re-flash 指令，在全新板子上會直接失敗。Secure Boot 重開的路徑
+待做，詳見 `HANDOFF.md`。
 
 ### sdkconfig trap (hit repeatedly in this project)
 
@@ -114,35 +119,66 @@ Invariants:
 `MCPWM_TIMER_EVENT_EMPTY` (TEZ — timer equals zero) via the
 `update_cmp_on_tez` flag on the comparator. **Do not** call
 `mcpwm_timer_stop` / restart in the update path — that's where glitches
-come from. The 1 MHz upper bound is set by the 160 MHz source clock; at
-1 MHz duty resolution drops to 7 bits (exposed via
-`pwm_gen_duty_resolution_bits()` for the UI).
+come from.
+
+Frequency range is **153 Hz ~ 1 MHz**, constrained by the 16-bit MCPWM
+counter (`MCPWM_LL_MAX_COUNT_VALUE = 0x10000`). `resolution_hz = 10 MHz`
+is the compromise that lets the whole range fit:
+
+| freq         | period_ticks | duty bits |
+|--------------|--------------|-----------|
+|       153 Hz | 65359        | 16        |
+|     1 000 Hz | 10000        | 13        |
+|    10 000 Hz | 1000         | 10        |
+|   100 000 Hz | 100          | 6.6       |
+| 1 000 000 Hz | 10           | 3.3       |
+
+The actual bit count at any freq is exposed via
+`pwm_gen_duty_resolution_bits()` for the UI. If future requirements need
+freq < 153 Hz, change `PWM_RESOLUTION_HZ` in `pwm_gen.c` (lower resolution
+→ wider freq range but fewer duty bits at the top end).
 
 The "change-trigger output" on a separate GPIO is a software pulse from
 `control_task` after the write succeeds — not a hardware sync output. If
 jitter on that trigger matters, wire it to an MCPWM ETM event instead.
 
-## Security posture
+## Security posture — 目前 disabled
 
-Secure Boot V2 + Flash Encryption are both enabled by default in
-**development mode** (re-flashable key, JTAG available). The one-way
-transition to release mode is documented step-by-step in
-`docs/release-hardening.md` — every step burns eFuses and is irreversible,
-so it's a checklist the human runs, not a script. Don't automate it.
+`sdkconfig.defaults` 現階段把 `CONFIG_SECURE_BOOT` 跟
+`CONFIG_SECURE_FLASH_ENC_ENABLED` 都設 `n` (temporary workaround)，因為
+全新 eFuse 板子第一次 boot 這兩個 feature 都開時會 boot loop (`Saved PC`
+指 `process_segment @ esp_image_format.c:622`)，root cause 待定位。
 
-`secure_boot_signing_key.pem` is gitignored; every developer generates
-their own with `espsecure.py generate_signing_key --version 2`.
+要加回 security 的順序：先單獨啟用 Secure Boot V2（不開 Flash Enc）確認
+能 boot；再單獨啟用 Flash Enc（不開 SB）；兩者都能單獨 work 再 combined。
+這個 bisect 還沒做，詳情見 `HANDOFF.md` 的 Bug 1 段。
 
-## esp_tinyusb pinning
+Release-mode 的 irreversible eFuse checklist 仍在 `docs/release-hardening.md`；
+Step 0 要改寫成「先確認 non-secure build 全功能驗證過，再單 feature
+啟用 security」— 現在的 Step 0 不對。
 
-Pinned to `espressif/esp_tinyusb ~1.7.0` (1.x series) via
-`main/idf_component.yml`. The 2.x rewrite requires hand-building the
-composite configuration descriptor (`tinyusb_desc_config_t.full_speed_config`).
-1.x auto-generates HID+CDC composite descriptors from Kconfig, which is
-what this firmware relies on. If you upgrade to 2.x,
-`components/usb_composite/usb_composite.c` and `usb_descriptors.c` both
-need rewriting, and the 3 Kconfig options for TinyUSB in
-`sdkconfig.defaults` change meaning.
+`secure_boot_signing_key.pem` 已 gitignored；每個 dev 自己用
+`espsecure.py generate_signing_key --version 2` 產。
+
+## esp_tinyusb pinning + composite descriptor
+
+Pinned to `espressif/esp_tinyusb ~1.7.0` via `main/idf_component.yml`。
+
+**Important**: 1.7.x 的 default config descriptor **不處理 HID**（只 cover
+CDC/MSC/NCM/VENDOR）。開 `CFG_TUD_HID > 0` 就必須提供自製
+`configuration_descriptor`，否則 `tinyusb_set_descriptors` 會 reject。
+`usb_composite.c` 的 `s_configuration_descriptor[]` 就是這個 —— IF0 HID,
+IF1+IF2 CDC (via IAD)，EP 0x81 HID IN, 0x82 CDC notif IN, 0x03 CDC OUT,
+0x83 CDC IN。
+
+TinyUSB 的 `TUD_HID_DESCRIPTOR()` 要 compile-time report desc length，
+所以 `HID_REPORT_DESC_SIZE` 寫死 `53` 並在 `usb_descriptors.c` 用
+`_Static_assert(sizeof(usb_hid_report_descriptor) == 53)` 綁住，改 report
+descriptor 時 compile error 會立刻提醒你同步更新。
+
+升級到 esp_tinyusb 2.x 時 `tinyusb_config_t` 改用
+`full_speed_config / high_speed_config`，上述 descriptor bytes 格式不變，
+但 struct field name 要跟著改。
 
 ## Wire protocols (host tool contracts)
 
