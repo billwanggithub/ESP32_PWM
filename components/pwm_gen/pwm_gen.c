@@ -11,17 +11,27 @@
 #include "freertos/task.h"
 
 // MCPWM 的 timer counter 是 16-bit（MCPWM_LL_MAX_COUNT_VALUE = 0x10000），所以
-// period_ticks 必須 ∈ [2, 65535]。一個固定 resolution_hz 覆蓋不了 1 Hz ~ 1 MHz
-// 六個 decade，於是用 3-band 動態 resolution：每次 pwm_gen_set() 依 freq
-// 挑「能在 16-bit counter 內塞下 period」的最高 resolution。同 band 內走
-// TEZ latch glitch-free 更新，跨 band 需要 teardown→recreate timer（oper /
-// cmpr / gen 物件保留並重新 connect）、會有 ~tens of µs 的 output 斷點。
+// period_ticks 必須 ∈ [2, 65535]。一個固定 resolution_hz 覆蓋不了 5 Hz ~ 1 MHz，
+// 於是用 2-band 動態 resolution：每次 pwm_gen_set() 依 freq 挑適合的 band。
+// 同 band 內走 TEZ latch glitch-free 更新，跨 band 需要 teardown→recreate
+// timer、有 ~tens of µs 的 output 斷點。
+//
+// **Critical constraint**: ESP32-S3 MCPWM group 0 share 一個 group prescaler，
+// 一旦第一次 new_timer 把 group->prescale committed 之後就不能變。因此 HI / LO
+// 兩個 band 的 resolution_hz 必須落在「同一個 group_prescale 下 timer_prescale
+// 都 ∈ [1..256]」的範圍內。driver 的 default group_prescale=2（group clock =
+// 80 MHz），timer_prescale 範圍 [1..256] 對應 module resolution = 80 MHz ~
+// 312.5 kHz。HI 用 10 MHz（timer_prescale=8），LO 用 320 kHz（timer_prescale=250），
+// 兩個都在範圍內且共用 group_prescale=2。
 //
 //   Band  resolution_hz  freq range       period_ticks    duty bits
 //   HI    10 MHz         153 Hz – 1 MHz   10 – 65359      3.3 – 16
-//   MID   160 kHz        3 Hz – 152 Hz    1052 – 53333    10 – 16
-//   LO    1 kHz          1 Hz – 2 Hz      500 – 1000      9 – 10
-#define PWM_FREQ_MIN_HZ 1u
+//   LO    320 kHz        5 Hz – 152 Hz    2105 – 64000    11 – 16
+//
+// 1 Hz ~ 4 Hz 需要更低 resolution（resolution ≤ 65 kHz），那會超出 group_prescale=2
+// 允許的 timer_prescale 範圍，會 trigger "group prescale conflict" error。要延伸到
+// 1 Hz 得改用 LEDC peripheral 或第二個 MCPWM group（本檔案 out of scope）。
+#define PWM_FREQ_MIN_HZ 5u
 #define PWM_FREQ_MAX_HZ 1000000u
 
 typedef struct {
@@ -32,8 +42,7 @@ typedef struct {
 // Ordered by descending resolution. First entry with freq >= freq_min wins.
 static const pwm_band_t s_bands[] = {
     { 10000000u, 153u },   // HI
-    {   160000u,   3u },   // MID
-    {     1000u,   1u },   // LO
+    {   320000u,   5u },   // LO
 };
 
 static const char *TAG = "pwm_gen";
@@ -144,24 +153,38 @@ esp_err_t pwm_gen_init(const pwm_gen_config_t *cfg)
     return ESP_OK;
 }
 
-// Tear down the current timer and bring up a new one with a different
-// resolution_hz / period_ticks combination. Operator / comparator / generator
-// objects are retained and reconnected — their action config (high on TEZ,
-// low on compare) is preserved. Call site already validated band and period.
+// Swap the current timer for a new one at a different resolution_hz.
+// Operator / comparator / generator objects are retained; only the timer
+// handle is replaced. ESP32-S3 MCPWM group 0 has ONE shared prescaler for
+// all timers in the group, so we cannot hold two timers with different
+// resolution_hz values at once — the old timer must be fully deleted before
+// a new one with a different resolution can be created. This produces a
+// brief (~tens of µs) output discontinuity during the swap.
 static esp_err_t reconfigure_for_band(const pwm_band_t *band,
                                       uint32_t new_period,
                                       uint32_t new_compare)
 {
     esp_err_t err;
 
+    // Stop and tear down the old timer first. All three steps must succeed
+    // in order for the group prescaler to be released, freeing it for the
+    // new resolution. If anything fails here, log and bail — s_pwm.timer is
+    // still valid so the output keeps running on the old timer.
     err = mcpwm_timer_start_stop(s_pwm.timer, MCPWM_TIMER_STOP_EMPTY);
-    if (err != ESP_OK) { ESP_LOGE(TAG, "timer stop: %s", esp_err_to_name(err)); return err; }
+    if (err != ESP_OK) { ESP_LOGE(TAG, "old timer stop: %s", esp_err_to_name(err)); return err; }
 
     err = mcpwm_timer_disable(s_pwm.timer);
-    if (err != ESP_OK) { ESP_LOGE(TAG, "timer disable: %s", esp_err_to_name(err)); return err; }
+    if (err != ESP_OK) { ESP_LOGE(TAG, "old timer disable: %s", esp_err_to_name(err)); return err; }
 
     err = mcpwm_del_timer(s_pwm.timer);
-    if (err != ESP_OK) { ESP_LOGE(TAG, "timer del: %s", esp_err_to_name(err)); return err; }
+    if (err != ESP_OK) {
+        ESP_LOGE(TAG, "old timer del: %s", esp_err_to_name(err));
+        return err;
+    }
+    // Old timer is gone. s_pwm.timer is a dangling pointer until we install
+    // the new one below. No other task can call pwm_gen_set() concurrently —
+    // control_task serializes everything — but if the new_timer step fails we
+    // must zero out s_pwm.timer to prevent subsequent use-after-free.
     s_pwm.timer = NULL;
 
     mcpwm_timer_config_t timer_cfg = {
@@ -172,7 +195,11 @@ static esp_err_t reconfigure_for_band(const pwm_band_t *band,
         .period_ticks  = new_period,
     };
     err = mcpwm_new_timer(&timer_cfg, &s_pwm.timer);
-    if (err != ESP_OK) { ESP_LOGE(TAG, "timer new: %s", esp_err_to_name(err)); return err; }
+    if (err != ESP_OK) {
+        ESP_LOGE(TAG, "new timer: %s", esp_err_to_name(err));
+        s_pwm.timer = NULL;
+        return err;
+    }
 
     err = mcpwm_operator_connect_timer(s_pwm.oper, s_pwm.timer);
     if (err != ESP_OK) { ESP_LOGE(TAG, "oper connect: %s", esp_err_to_name(err)); return err; }
@@ -183,6 +210,15 @@ static esp_err_t reconfigure_for_band(const pwm_band_t *band,
     err = mcpwm_timer_enable(s_pwm.timer);
     if (err != ESP_OK) { ESP_LOGE(TAG, "timer enable: %s", esp_err_to_name(err)); return err; }
 
+    // ESP32-S3 MCPWM hardware quirk: the timer_prescale register only takes
+    // effect on a genuine stop→start edge. Since the old timer occupied this
+    // same hardware slot and left timer_start=START_NO_STOP (mode=2) in the
+    // register, writing START_NO_STOP again does not re-latch the prescale.
+    // Explicitly issue STOP_EMPTY (0) first, then START_NO_STOP (2), so the
+    // hardware sees the 0→2 transition and loads the new prescale.
+    err = mcpwm_timer_start_stop(s_pwm.timer, MCPWM_TIMER_STOP_EMPTY);
+    if (err != ESP_OK) { ESP_LOGE(TAG, "timer stop (latch): %s", esp_err_to_name(err)); return err; }
+
     err = mcpwm_timer_start_stop(s_pwm.timer, MCPWM_TIMER_START_NO_STOP);
     if (err != ESP_OK) { ESP_LOGE(TAG, "timer start: %s", esp_err_to_name(err)); return err; }
 
@@ -192,6 +228,7 @@ static esp_err_t reconfigure_for_band(const pwm_band_t *band,
 esp_err_t pwm_gen_set(uint32_t freq_hz, float duty_pct)
 {
     if (!s_pwm.initialised) return ESP_ERR_INVALID_STATE;
+    if (!s_pwm.timer) return ESP_ERR_INVALID_STATE;  // previous reconfigure failed midway
     if (freq_hz < PWM_FREQ_MIN_HZ || freq_hz > PWM_FREQ_MAX_HZ) return ESP_ERR_INVALID_ARG;
     if (duty_pct < 0.0f || duty_pct > 100.0f) return ESP_ERR_INVALID_ARG;
 
