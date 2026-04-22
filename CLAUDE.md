@@ -158,19 +158,33 @@ Invariants:
 `mcpwm_timer_stop` / restart in the update path for same-band changes —
 that's where glitches come from.
 
-Frequency range is **1 Hz ~ 1 MHz**. The 16-bit MCPWM counter
-(`MCPWM_LL_MAX_COUNT_VALUE = 0x10000`) cannot span 6 decades with a
-single fixed `resolution_hz`, so `pwm_gen.c` defines a 3-band table and
+Frequency range is **5 Hz ~ 1 MHz**. The 16-bit MCPWM counter
+(`MCPWM_LL_MAX_COUNT_VALUE = 0x10000`) cannot span that range with a
+single fixed `resolution_hz`, so `pwm_gen.c` defines a 2-band table and
 picks a band per call:
 
-| Band | resolution_hz | freq range     | period_ticks   | duty bits |
-|------|---------------|----------------|----------------|-----------|
-| HI   | 10 MHz        | 153 Hz – 1 MHz | 10 – 65359     | 3.3 – 16  |
-| MID  | 160 kHz       | 3 Hz – 152 Hz  | 1052 – 53333   | 10 – 16   |
-| LO   | 1 kHz         | 1 Hz – 2 Hz    | 500 – 1000     | 9 – 10    |
+| Band | resolution_hz | freq range       | period_ticks   | duty bits |
+|------|---------------|------------------|----------------|-----------|
+| HI   | 10 MHz        | 153 Hz – 1 MHz   | 10 – 65359     | 3.3 – 16  |
+| LO   | 320 kHz       | 5 Hz – 152 Hz    | 2105 – 64000   | 11 – 16   |
+
+**Critical constraint — MCPWM group prescaler is committed on first use
+and cannot be changed.** Once `mcpwm_new_timer()` runs the first time,
+`group->prescale` is locked (default 2 → group clock = 80 MHz). Every
+subsequent timer in the same group must share that group_prescale; only
+the per-timer `timer_prescale` (range [1..256]) can vary. That gives a
+max 256× spread of resolutions within one group. HI=10 MHz uses
+timer_prescale=8; LO=320 kHz uses timer_prescale=250. Both resolutions
+picked to keep timer_prescale ≤ 256 at the driver's default
+`group_prescale=2`, so `new_timer()` with the other resolution doesn't
+trigger `"group prescale conflict"` errors.
+
+1 Hz – 4 Hz cannot be reached this way: it would require
+`timer_prescale > 256`. Extending below 5 Hz requires switching the
+generator to LEDC or using MCPWM group 1 — both are bigger refactors.
 
 **Same-band updates** (e.g. 500 Hz → 600 Hz) stay glitch-free via TEZ.
-**Band-crossing updates** (e.g. 200 Hz → 100 Hz) go through
+**Band-crossing updates** (152 Hz ↔ 153 Hz) go through
 `reconfigure_for_band()`: stop → disable → delete timer → `mcpwm_new_timer`
 with the new `resolution_hz` → reconnect operator → re-arm comparator →
 enable → start. This produces a brief (~tens of µs) output discontinuity.
@@ -179,9 +193,7 @@ reconfigure so their action config (high on TEZ, low on compare) does
 not need to be re-registered.
 
 The actual bit count at any freq is exposed via
-`pwm_gen_duty_resolution_bits()` for the UI. If future requirements need
-sub-Hz, the MCPWM counter can't stretch further — an LEDC-based second
-generator or software timer would be needed.
+`pwm_gen_duty_resolution_bits()` for the UI.
 
 The "change-trigger output" on a separate GPIO is a software pulse from
 `control_task` after the write succeeds — not a hardware sync output.
