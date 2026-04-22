@@ -1,0 +1,24 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>ESP32-PWM Setup Complete</title>
+<style>
+body { font-family: sans-serif; max-width: 420px; margin: 1em auto; padding: 0 1em; }
+h1 { font-size: 1.3em; }
+.link { display: block; padding: 0.7em; margin: 0.6em 0; background: #eef; border: 1px solid #88a; border-radius: 4px; text-decoration: none; color: #205080; word-break: break-all; }
+.hint { color: #555; font-size: 0.95em; }
+</style>
+</head>
+<body>
+<h1>Setup complete [OK]</h1>
+<p class="hint">Reconnect your phone to your home Wi-Fi, then tap either link:</p>
+
+<a class="link" href="http://{{MDNS}}/">http://{{MDNS}}/</a>
+<p class="hint">(try this first)</p>
+
+<a class="link" href="http://{{IP}}/">http://{{IP}}/</a>
+<p class="hint">(fallback if .local names do not resolve on your phone)</p>
+</body>
+</html>

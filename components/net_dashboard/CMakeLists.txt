@@ -27,4 +27,5 @@ idf_component_register(
                    "web/app.js"
                    "web/app.css"
                    "web/setup.html"
+                   "web/success.html"
 )
