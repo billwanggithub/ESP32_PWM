@@ -193,13 +193,28 @@ esp_err_t captive_portal_start(captive_portal_creds_cb_t cb)
     httpd_uri_t scan   = { .uri = "/scan",       .method = HTTP_GET,  .handler = scan_get };
     httpd_uri_t save   = { .uri = "/save_wifi",  .method = HTTP_POST, .handler = save_wifi_post };
     httpd_uri_t okpage = { .uri = "/success",    .method = HTTP_GET,  .handler = success_get };
-    httpd_uri_t any    = { .uri = "/*",          .method = HTTP_GET,  .handler = catchall };
 
     httpd_register_uri_handler(s_httpd, &root);
     httpd_register_uri_handler(s_httpd, &scan);
     httpd_register_uri_handler(s_httpd, &save);
     httpd_register_uri_handler(s_httpd, &okpage);
-    httpd_register_uri_handler(s_httpd, &any);
+
+    // Register the wildcard catch-all separately for each HTTP method we
+    // expect captive-portal probes or background apps might use. GET
+    // covers Android/Apple/Windows detection probes; HEAD is a common
+    // alt; POST catches app chatter (e.g. WeChat /mmtls/*) so those
+    // requests 302 to / instead of 405'ing and potentially confusing
+    // detectors. esp_http_server does not expose HTTP_ANY, so register
+    // once per method.
+    const httpd_method_t catch_methods[] = { HTTP_GET, HTTP_HEAD, HTTP_POST };
+    for (size_t i = 0; i < sizeof(catch_methods)/sizeof(catch_methods[0]); i++) {
+        httpd_uri_t any = {
+            .uri     = "/*",
+            .method  = catch_methods[i],
+            .handler = catchall,
+        };
+        httpd_register_uri_handler(s_httpd, &any);
+    }
 
     ESP_LOGI(TAG, "captive portal up on :80");
     return ESP_OK;

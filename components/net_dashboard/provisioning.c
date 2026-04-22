@@ -93,19 +93,18 @@ static esp_err_t on_credentials(const char *ssid, const char *password,
     return ESP_FAIL;
 }
 
-static void ap_teardown_task(void *arg)
+// Background task: after the caller has switched to STA and started the
+// dashboard httpd on port 80, keep the SoftAP up for a short grace window
+// so the phone can still view its current /success page, then drop the AP.
+static void ap_grace_task(void *arg)
 {
-    // Let the phone load /success before we kill the AP.
-    vTaskDelay(pdMS_TO_TICKS(30000));
-    ESP_LOGI(TAG, "tearing down AP + DNS hijack");
+    vTaskDelay(pdMS_TO_TICKS(25000));
+    ESP_LOGI(TAG, "dropping SoftAP + DNS hijack");
     dns_hijack_stop();
-    captive_portal_stop();
-    // Polite deauth-broadcast before dropping the AP so any phones still
-    // associated (e.g. user lingered on /success past the 30 s) see a
-    // clean disconnect instead of a silent dangling association.
+    // Polite deauth-broadcast so any phones still on the AP see a clean
+    // disconnect instead of a silent dangling association.
     esp_wifi_deauth_sta(0);
     esp_wifi_set_mode(WIFI_MODE_STA);
-    mdns_svc_start();
     vTaskDelete(NULL);
 }
 
@@ -132,8 +131,22 @@ static esp_err_t run_softap_portal(void)
     // Block until on_credentials succeeds — sets EV_GOT_IP.
     xEventGroupWaitBits(s_ev, EV_GOT_IP, pdFALSE, pdTRUE, portMAX_DELAY);
 
-    // Hand control back to caller; schedule AP teardown in 30 s.
-    xTaskCreate(ap_teardown_task, "ap_down", 2048, NULL, 2, NULL);
+    // Give the phone a moment to GET /success after the 200 response. The
+    // phone's JS does window.location = '/success' right after seeing the
+    // POST reply; 3 s is plenty on LAN. Then tear down the captive httpd
+    // so port 80 is free for net_dashboard's own httpd.
+    vTaskDelay(pdMS_TO_TICKS(3000));
+    ESP_LOGI(TAG, "captive portal served /success, tearing down httpd");
+    captive_portal_stop();
+
+    // Start mDNS now that STA has an IP. (Done here instead of in the
+    // grace task so mDNS is advertising before net_dashboard starts up.)
+    mdns_svc_start();
+
+    // Grace task keeps the AP + DNS hijack running a little longer so the
+    // phone's browser can still reload /success / refresh the page. After
+    // the grace window, AP drops and only STA remains.
+    xTaskCreate(ap_grace_task, "ap_grace", 2048, NULL, 2, NULL);
     return ESP_OK;
 }
 
