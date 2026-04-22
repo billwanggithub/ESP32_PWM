@@ -272,18 +272,19 @@ Step 0 要改寫成「先確認 non-secure build 全功能驗證過，再單 fea
 
 - **`espressif/esp_tinyusb ~1.7.0`** — composite HID + CDC descriptor。
   v6.0 IDF 跟 1.7.x 仍相容（驗證過 build + 枚舉 OK）。
-- **`espressif/network_provisioning ^1.2.0`** — v6.0 把原本 IDF built-in
-  的 `wifi_provisioning` component 拔掉、搬到 component manager 並
-  rename 成 `network_provisioning`，API prefix 從 `wifi_prov_*` 變
-  `network_prov_*`，event ID `WIFI_PROV_CRED_*` 改 `NETWORK_PROV_WIFI_CRED_*`
-  （多了 `WIFI_` infix，因為 component 同時支援 Wi-Fi 跟 Thread）。
-  搭配 `CONFIG_NETWORK_PROV_NETWORK_TYPE_WIFI=y` 才會 unmask Wi-Fi event。
-  V6.0 預設關掉 protocomm SECURITY_1 enum，需要
-  `CONFIG_ESP_PROTOCOMM_SUPPORT_SECURITY_VERSION_1=y` 重新打開（手機端
-  ESP BLE Provisioning app 用 PoP-based 握手，不能改 security 2 SRP6a）。
 - **`espressif/cjson ^1.7.19`** — v6.0 把 IDF built-in `json` component
-  拔掉，cJSON 改 component manager 上 `espressif/cjson`。
-  `net_dashboard/CMakeLists.txt` 的 REQUIRES 寫 `espressif__cjson`。
+  拔掉，cJSON 改 component manager 上 `espressif/cjson`（直接 depend，
+  不是 transitive）。`net_dashboard/CMakeLists.txt` 的 REQUIRES 寫
+  `espressif__cjson`。
+- **`espressif/mdns ^1.4.0`** — mDNS hostname `esp32-pwm.local` 廣告
+  用。`net_dashboard/CMakeLists.txt` 的 REQUIRES 寫 `mdns`。
+
+Wi-Fi provisioning 現在走 SoftAP + captive portal，不再依賴 BLE 或
+任何外部 provisioning component — 板子第一次 boot 沒有 creds 時會開
+`ESP32-PWM-setup` 這個 open AP，phone 接上後 Android captive-portal
+detector 會自動跳 browser。成功後 success page 同時秀 `esp32-pwm.local`
+跟 raw IP。細節見 `components/net_dashboard/provisioning.c` 跟 spec
+`docs/superpowers/specs/2026-04-22-softap-captive-portal-design.md`。
 
 ### esp_tinyusb 1.7.x 的 HID 限制
 
@@ -337,9 +338,10 @@ header 的 transitive include。在 component CMakeLists 加：
 Instance of the "single handler, multiple frontends" invariant. Every
 reset entry point lands on `net_dashboard_factory_reset()`
 (`components/net_dashboard/include/net_dashboard.h`), which wipes
-stored Wi-Fi credentials via `network_prov_mgr_reset_wifi_provisioning()`
-and calls `esp_restart()`. Next boot the device sees no credentials →
-BLE re-advertises as `ESP32-PWM` for pairing.
+stored Wi-Fi credentials via `prov_clear_credentials()` (calls
+`esp_wifi_restore()`) and calls `esp_restart()`. Next boot the device
+sees no credentials → SoftAP `ESP32-PWM-setup` opens for captive-portal
+provisioning.
 
 ```
 Web UI confirm      ──┐

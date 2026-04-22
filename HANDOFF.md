@@ -5,6 +5,27 @@ Branch: `chore/migrate-idf-v6.0` (off `feat/pwm-1hz-floor`)
 Working dir: `D:\github\ESP32_PWM`
 IDF: `C:\esp\v6.0\esp-idf` (was `C:\Espressif\frameworks\esp-idf-v5.5.1`)
 
+## 2026-04-22 — provisioning migration: BLE → SoftAP captive portal
+
+Dropped `espressif/network_provisioning` + BLE (NimBLE) + PoP-based
+protocomm SECURITY_1. Replaced with in-project SoftAP + captive portal
+flow (components/net_dashboard/captive_portal.c, dns_hijack.c,
+mdns_svc.c). Saves ~60 KB flash, removes the Espressif BLE Provisioning
+Android app requirement.
+
+User flow: on boot no creds → AP `ESP32-PWM-setup` + DNS hijack (every
+query → 192.168.4.1) + catch-all HTTP 302 to /. Android captive-portal
+detector auto-opens browser on setup page. After submit + STA connect,
+success page shows `esp32-pwm.local` and raw DHCP IP. AP torn down 30 s
+later. Factory reset path (`prov_clear_credentials` → `esp_wifi_restore`)
+unchanged for callers.
+
+Open items:
+
+- iOS not validated yet — protocol identical, likely works, untested.
+- STA failure doesn't fall back to AP at runtime — user must factory-reset
+  to re-enter setup. Acceptable per spec (Q4 in brainstorming).
+
 ## 2026-04-22 晚 — factory reset / re-provisioning 四路打通 (commit `7ef24d6`)
 
 之前沒有 runtime 路徑可以清 Wi-Fi credentials，要重新 provision 一定得
