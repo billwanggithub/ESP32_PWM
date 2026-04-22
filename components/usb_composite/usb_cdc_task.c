@@ -13,6 +13,7 @@
 
 #include "usb_protocol.h"
 #include "ota_core.h"
+#include "net_dashboard.h"
 
 static const char *TAG = "usb_cdc";
 
@@ -105,6 +106,22 @@ static void handle_frame(const uint8_t *data, size_t len)
     case USB_CDC_OP_OTA_END: {
         send_ota_status(OTA_STATE_DONE, ota_core_progress(), 0);
         ota_core_end_and_reboot();   // does not return on success
+    } break;
+    case USB_CDC_OP_FACTORY_RESET: {
+        // Magic byte guards against stray frames — 1-byte payload with 0xA5.
+        if (plen < 1 || payload[0] != USB_CDC_FACTORY_RESET_MAGIC) {
+            ESP_LOGW(TAG, "factory_reset CDC frame with bad magic; ignored");
+            break;
+        }
+        // Send empty-payload ack frame so host knows the reset is committing.
+        uint8_t end = USB_CDC_SLIP_END;
+        uint8_t ack_op = USB_CDC_OP_FACTORY_ACK;
+        tud_cdc_write(&end, 1);
+        tud_cdc_write(&ack_op, 1);
+        tud_cdc_write(&end, 1);
+        tud_cdc_write_flush();
+        ESP_LOGW(TAG, "factory_reset requested via CDC");
+        net_dashboard_factory_reset();
     } break;
     default:
         ESP_LOGW(TAG, "unknown CDC op 0x%02x", op);

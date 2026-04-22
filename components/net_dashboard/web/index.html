@@ -42,6 +42,16 @@
     <progress id="otaprog" max="100" value="0"></progress>
   </section>
 
+  <section class="panel">
+    <h2>Factory reset</h2>
+    <p class="warn">
+      Clears stored Wi-Fi credentials and reboots. The device will advertise
+      <code>ESP32-PWM</code> over BLE for re-provisioning.
+    </p>
+    <button id="factory_reset" class="danger">Factory reset</button>
+    <span id="factory_reset_status" class="status"></span>
+  </section>
+
   <script src="/app.js"></script>
 </body>
 </html>

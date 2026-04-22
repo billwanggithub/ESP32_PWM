@@ -2,13 +2,25 @@
 
 #include "esp_http_server.h"
 #include "esp_log.h"
+#include "esp_system.h"
+#include "driver/gpio.h"
+#include "freertos/FreeRTOS.h"
+#include "freertos/task.h"
 #include "ota_core.h"
+#include "prov_internal.h"
 
 esp_err_t provisioning_run_and_connect(void);
 void      ws_register(httpd_handle_t server);
 void      ws_on_client_closed(httpd_handle_t hd, int fd);
 
 static const char *TAG = "dashboard";
+
+// GPIO0 is the BOOT strapping pin — sampled at reset to select
+// flash/download mode, but free for application use afterwards. Physical
+// pull-up on the YD board means idle=1, pressed=0.
+#define BOOT_BUTTON_GPIO           0
+#define BOOT_LONGPRESS_MS          3000
+#define BOOT_POLL_MS               50
 
 extern const char index_html_start[] asm("_binary_index_html_start");
 extern const char index_html_end[]   asm("_binary_index_html_end");
@@ -78,11 +90,65 @@ static httpd_handle_t start_http(void)
     return server;
 }
 
+static void factory_reset_task(void *arg)
+{
+    // Short delay lets any caller-side ack (ws frame, HID IN report, CDC
+    // status frame) flush before the restart interrupts those transports.
+    vTaskDelay(pdMS_TO_TICKS(200));
+    ESP_LOGW(TAG, "factory reset: clearing credentials and restarting");
+    prov_clear_credentials();
+    esp_restart();
+}
+
+void net_dashboard_factory_reset(void)
+{
+    // Idempotent: if a task is already running we don't need a second.
+    static volatile bool s_triggered = false;
+    if (s_triggered) return;
+    s_triggered = true;
+    xTaskCreate(factory_reset_task, "fact_rst", 4096, NULL, 5, NULL);
+}
+
+static void boot_button_task(void *arg)
+{
+    // Hold BOOT ≥3 s → factory reset. Short presses are ignored so a casual
+    // BOOT press during dev work doesn't nuke credentials.
+    uint32_t held_ms = 0;
+    while (true) {
+        vTaskDelay(pdMS_TO_TICKS(BOOT_POLL_MS));
+        if (gpio_get_level(BOOT_BUTTON_GPIO) == 0) {
+            held_ms += BOOT_POLL_MS;
+            if (held_ms >= BOOT_LONGPRESS_MS) {
+                ESP_LOGW(TAG, "BOOT long-press detected → factory reset");
+                net_dashboard_factory_reset();
+                // factory_reset_task will restart the chip; we can just spin.
+                vTaskSuspend(NULL);
+            }
+        } else {
+            held_ms = 0;
+        }
+    }
+}
+
+static void start_boot_button_watcher(void)
+{
+    gpio_config_t io = {
+        .pin_bit_mask = 1ULL << BOOT_BUTTON_GPIO,
+        .mode         = GPIO_MODE_INPUT,
+        .pull_up_en   = GPIO_PULLUP_ENABLE,    // board has hw pull-up too; redundant but safe
+        .pull_down_en = GPIO_PULLDOWN_DISABLE,
+        .intr_type    = GPIO_INTR_DISABLE,
+    };
+    gpio_config(&io);
+    xTaskCreate(boot_button_task, "boot_btn", 2048, NULL, 2, NULL);
+}
+
 esp_err_t net_dashboard_start(void)
 {
     esp_err_t e = provisioning_run_and_connect();
     if (e != ESP_OK) return e;
     httpd_handle_t s = start_http();
     ESP_LOGI(TAG, "dashboard http server up: %p", s);
+    start_boot_button_watcher();
     return ESP_OK;
 }

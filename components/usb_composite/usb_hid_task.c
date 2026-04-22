@@ -12,6 +12,7 @@
 #include "app_api.h"
 #include "pwm_gen.h"
 #include "rpm_cap.h"
+#include "net_dashboard.h"
 
 static const char *TAG = "usb_hid";
 
@@ -53,6 +54,15 @@ void tud_hid_set_report_cb(uint8_t instance, uint8_t report_id,
         };
         control_task_post(&c1, 0);
         control_task_post(&c2, 0);
+    } break;
+    case USB_HID_REPORT_FACTORY_RESET: {
+        // Magic byte guards against a stray report triggering a wipe.
+        if (bufsize < 1 || buffer[0] != USB_HID_FACTORY_RESET_MAGIC) {
+            ESP_LOGW(TAG, "factory_reset HID report with bad magic; ignored");
+            return;
+        }
+        ESP_LOGW(TAG, "factory_reset requested via HID");
+        net_dashboard_factory_reset();
     } break;
     default:
         ESP_LOGW(TAG, "unknown OUT report id 0x%02x", report_id);

@@ -6,11 +6,12 @@
 // HID report map matching the spec:
 //   0x01 OUT: set_pwm        (uint32 freq, float duty)            8 B
 //   0x02 OUT: set_rpm_params (uint8 pole, uint16 mavg, uint32 us) 7 B
+//   0x03 OUT: factory_reset  (uint8 magic=0xA5)                   1 B
 //   0x10 IN : status         (u32 freq, f32 duty, f32 rpm, u32 seq) 16 B
 //   0x11 IN : ack            (u8 cmd_id, u8 ok, u32 ts)            6 B
 // We use a single top-level vendor-defined collection with Report IDs.
 
-enum { REPORT_ID_SET_PWM = 0x01, REPORT_ID_SET_RPM = 0x02,
+enum { REPORT_ID_SET_PWM = 0x01, REPORT_ID_SET_RPM = 0x02, REPORT_ID_FACTORY_RESET = 0x03,
        REPORT_ID_STATUS  = 0x10, REPORT_ID_ACK     = 0x11 };
 
 const uint8_t usb_hid_report_descriptor[] = {
@@ -29,6 +30,12 @@ const uint8_t usb_hid_report_descriptor[] = {
     0x85, REPORT_ID_SET_RPM,
     0x09, 0x03,
     0x75, 0x08, 0x95, 7,
+    0x91, 0x02,
+
+    // 0x03 OUT factory_reset: 1 byte
+    0x85, REPORT_ID_FACTORY_RESET,
+    0x09, 0x04,
+    0x75, 0x08, 0x95, 1,
     0x91, 0x02,
 
     // 0x10 IN status: 16 bytes
@@ -50,7 +57,7 @@ const size_t usb_hid_report_descriptor_size = sizeof(usb_hid_report_descriptor);
 
 // usb_composite.c 的 TUD_HID_DESCRIPTOR() 要在 compile time 給 report desc
 // 的 byte length，所以用 static_assert 把它綁在 sizeof 上，避免兩邊漂移。
-_Static_assert(sizeof(usb_hid_report_descriptor) == 53,
+_Static_assert(sizeof(usb_hid_report_descriptor) == 63,
                "HID_REPORT_DESC_SIZE in usb_composite.c must match this size");
 
 // TinyUSB expects this specific callback name.

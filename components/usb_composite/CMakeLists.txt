@@ -13,6 +13,10 @@ idf_component_register(
                 pwm_gen
                 rpm_cap
                 ota_core
+                # HID/CDC factory-reset frontends call net_dashboard_factory_reset().
+                # Keeps the reprovision flow in a single place so all three transports
+                # share one restart path.
+                net_dashboard
                 # v6.0: freertos/ringbuf.h moved out of freertos transitive
                 # closure; usb_cdc_task.c uses RingbufHandle_t for SLIP frame
                 # buffering, so explicit dep is now required.

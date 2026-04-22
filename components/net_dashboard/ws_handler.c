@@ -12,6 +12,7 @@
 #include "app_api.h"
 #include "pwm_gen.h"
 #include "rpm_cap.h"
+#include "net_dashboard.h"
 
 static const char *TAG = "ws";
 
@@ -73,6 +74,10 @@ static void handle_json(cJSON *root, int fd)
             };
             control_task_post(&c2, 0);
         }
+    } else if (strcmp(type_j->valuestring, "factory_reset") == 0) {
+        ESP_LOGW(TAG, "factory_reset requested via ws fd=%d", fd);
+        ws_send_json_to(fd, "{\"type\":\"ack\",\"op\":\"factory_reset\"}");
+        net_dashboard_factory_reset();
     }
 }
 

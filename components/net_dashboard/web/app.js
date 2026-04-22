@@ -22,6 +22,9 @@
     ctx.strokeStyle = '#4af'; ctx.lineWidth = 1.5; ctx.stroke();
   }
 
+  const factoryBtn = document.getElementById('factory_reset');
+  const factoryStatus = document.getElementById('factory_reset_status');
+
   ws.addEventListener('message', (ev) => {
     try {
       const msg = JSON.parse(ev.data);
@@ -31,6 +34,8 @@
         history.push(msg.rpm);
         if (history.length > MAX_POINTS) history.shift();
         draw();
+      } else if (msg.type === 'ack' && msg.op === 'factory_reset') {
+        factoryStatus.textContent = 'Device acknowledged — rebooting…';
       }
     } catch (e) { /* ignore */ }
   });
@@ -55,5 +60,16 @@
     const r = await fetch('/ota', { method: 'POST', body: f });
     if (r.ok) { prog.value = 100; alert('OTA accepted; device will reboot.'); }
     else     { alert(`OTA failed: ${r.status}`); }
+  });
+
+  factoryBtn.addEventListener('click', () => {
+    const ok = confirm(
+      'Factory reset: clear Wi-Fi credentials and reboot?\n\n' +
+      'The device will disconnect and advertise ESP32-PWM over BLE for re-provisioning.'
+    );
+    if (!ok) return;
+    factoryBtn.disabled = true;
+    factoryStatus.textContent = 'Sending…';
+    ws.send(JSON.stringify({ type: 'factory_reset' }));
   });
 })();

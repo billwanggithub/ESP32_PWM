@@ -13,6 +13,8 @@
 #include "network_provisioning/manager.h"
 #include "network_provisioning/scheme_ble.h"
 
+#include "prov_internal.h"
+
 static const char *TAG = "prov";
 
 static EventGroupHandle_t s_wifi_events;
@@ -79,4 +81,13 @@ esp_err_t provisioning_run_and_connect(void)
     xEventGroupWaitBits(s_wifi_events, WIFI_CONNECTED_BIT, pdFALSE, pdTRUE, portMAX_DELAY);
     ESP_LOGI(TAG, "wifi connected");
     return ESP_OK;
+}
+
+// network_prov_mgr_reset_wifi_provisioning() works even after the manager has
+// been deinit'd (see already-provisioned branch above) — it talks straight to
+// the underlying wifi NVS entries.
+esp_err_t prov_clear_credentials(void)
+{
+    ESP_LOGW(TAG, "clearing wifi credentials");
+    return network_prov_mgr_reset_wifi_provisioning();
 }
