@@ -11,7 +11,7 @@
 
 static const char *TAG = "dns_hijack";
 
-static TaskHandle_t s_task;
+static volatile TaskHandle_t s_task;
 static int          s_sock = -1;
 static volatile bool s_run;
 
@@ -64,7 +64,7 @@ static void dns_task(void *arg)
         if (qend < 0 || qend + 16 > (int)sizeof(buf)) continue;
 
         // Flip flags: QR=1 response, Opcode=query (leave), RA=1, RCODE=0.
-        buf[2] = 0x81;                       // QR=1, OPCODE=0, AA=0, TC=0, RD=copy(=1 usually)
+        buf[2] = 0x80 | (buf[2] & 0x01);     // QR=1, OPCODE=0, AA=0, TC=0, RD=copy-from-query
         buf[3] = 0x80;                       // RA=1, RCODE=0
         buf[6] = 0x00; buf[7] = 0x01;        // ANCOUNT = 1
         buf[8] = 0x00; buf[9] = 0x00;        // NSCOUNT = 0
@@ -101,7 +101,11 @@ esp_err_t dns_hijack_start(void)
 
     // 500ms recv timeout so the task can poll s_run during shutdown.
     struct timeval tv = { .tv_sec = 0, .tv_usec = 500 * 1000 };
-    setsockopt(s_sock, SOL_SOCKET, SO_RCVTIMEO, &tv, sizeof(tv));
+    if (setsockopt(s_sock, SOL_SOCKET, SO_RCVTIMEO, &tv, sizeof(tv)) < 0) {
+        ESP_LOGE(TAG, "setsockopt SO_RCVTIMEO failed: errno=%d", errno);
+        close(s_sock); s_sock = -1;
+        return ESP_FAIL;
+    }
 
     s_run = true;
     if (xTaskCreate(dns_task, "dns_hijack", 3072, NULL, 2, &s_task) != pdPASS) {
