@@ -1,9 +1,85 @@
 # Hand-off — ESP32-S3 PWM + RPM firmware
 
-Date: 2026-04-22 (updated 01:55)
-Branch: `main` — pushed to `github.com/billwanggithub/ESP32_PWM` @ `be4a9ad`
+Date: 2026-04-22 (updated 晚間，PWM band 作業)
+Branch: `feat/pwm-1hz-floor` (6 commits ahead of `main`, not pushed)
 Working dir: `D:\github\ESP32_PWM`
 IDF: `C:\Espressif\frameworks\esp-idf-v5.5.1`
+
+## 🔴 OPEN BUG — PWM 某些頻率 read error（handoff 當下狀態）
+
+User report: "some frequency still read error". 沒給詳細資料、沒指明是哪些
+freq、也沒說 error 是 log 裡的 error 還是 scope 讀到錯的頻率。下一個
+session 要做的第一件事是跟 user 問：
+
+1. 是哪幾個 freq 值（commanded vs scope measured）？
+2. Error 是指 `control: pwm set failed:` log line，還是 scope 讀到錯頻率但
+   log 顯示 success？
+3. 是 same-band 裡出錯（例如 500 Hz → 600 Hz）還是 band crossing 出錯
+   （例如 152 Hz ↔ 153 Hz）？
+
+已知 working: 1000 Hz 單獨設、1000 Hz → 100 Hz band crossing（MID→LO
+re-latch 修完後 scope 讀到正確的 100 Hz，counter-movement 診斷顯示 320 ticks
+per 1 ms = 320 kHz OK）。
+
+### Session 做過的事（背景）
+
+今天的目標是把 PWM 下限從 153 Hz 降到更低。過程如下：
+
+1. 最早想做 1 Hz floor（3-band：HI 10 MHz / MID 160 kHz / LO 1 kHz）
+   → hardware 做不到。ESP32-S3 MCPWM group 0 只有一個共用 prescaler，
+   一旦 `mcpwm_new_timer` 第一次 commit 之後 `group->prescale` 就 locked。
+   想切 band 會撞到 `mcpwm_set_prescale(270): group prescale conflict,
+   already is 2 but attempt to 4` error。
+2. 改成 2-band：HI 10 MHz (timer_prescale=8) + LO 320 kHz
+   (timer_prescale=250)。兩個都落在 `group_prescale=2` 下 timer_prescale
+   ∈ [1..256] 的範圍。Floor 變 5 Hz。Commit `2d4649d`。
+3. 改完還是 wrong output：commanded 100 Hz 但 scope 讀 3.125 kHz
+   (= 10 MHz / 3200)。深入追 MCPWM driver + register dump 發現是
+   **hardware timer_prescale register 只在 STOP→START edge 才 latch**。
+   driver 的 `mcpwm_new_timer` 重用同一個 timer_id 的 hardware slot，
+   而 `timer_cfg1.timer_start` 欄位還停在前一個 session 留下的 mode=2
+   (START_NO_STOP)，再寫一次 mode=2 不產生 edge、新的 prescale 不 latch。
+4. 修法：`reconfigure_for_band` 在 `mcpwm_timer_enable` 之後，手動發
+   `STOP_EMPTY (mode=0)` → `START_NO_STOP (mode=2)` 造出 0→2 transition，
+   prescale 就 latch 了。1000→100 Hz 驗證過 OK。Commit 包在 `2d4649d` 裡。
+
+### 可能還沒 cover 的 case
+
+想不到還沒測的 band crossing：
+
+- `pwm 5 50` (最低 LO 端)
+- `pwm 152 50` → `pwm 153 50` (HI↔LO 跨 band 的 boundary)
+- `pwm 153 50` → `pwm 152 50` (反向跨 band)
+- `pwm 1000000 50` (最高 HI 端)
+- 同 band 快速 update（500 → 600 → 500 → 600，應該 glitch-free 但可能踩別的 bug）
+
+現階段 `reconfigure_for_band` 的 STOP→START 拖了一個 TEZ cycle 才真的 stop。
+在 LO band 裡（5 Hz 一個 TEZ cycle = 200 ms），這段 "STOP→START latch" 可能
+比預期長很多。如果出錯的是 LO band 內的 freq，可能跟這個 timing 有關。
+
+### 快速重現步驟（給下一 session）
+
+```bash
+# ESP-IDF CMD shell (Start menu "ESP-IDF 5.5.1 CMD")
+cd D:\github\ESP32_PWM
+idf.py build
+idf.py -p COM24 flash       # 關閉 serial tool 再 flash
+```
+
+Serial: 用「串口調試助手」COM24 115200，**必須勾 DTR + RTS 兩個 checkbox**
+再打開（CH343 auto-program circuit 會卡在 download mode，詳見 CLAUDE.md
+「CH343 DTR/RTS auto-program trap」section）。
+
+Relevant files:
+
+- `components/pwm_gen/pwm_gen.c` — band table, `pick_band`, `reconfigure_for_band`
+- `docs/superpowers/specs/2026-04-22-pwm-1hz-floor-design.md` — 原本 1 Hz
+  floor 的 design doc（**過時，hardware 做不到**，但可以參考 band-table 思路）
+- `docs/superpowers/plans/2026-04-22-pwm-1hz-floor.md` — 對應 plan，過時
+- `CLAUDE.md` — 「PWM glitch-free update mechanism」section 有最新的 2-band
+  table + group prescale constraint 說明
+
+---
 
 Design spec lives at
 `C:\Users\billw\.claude\plans\read-the-project-plan-pure-eagle.md`.
