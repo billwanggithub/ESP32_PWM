@@ -115,6 +115,30 @@ All configurable under `idf.py menuconfig` -> *ESP32 PWM App*.
   CDC SLIP frame ops are defined in
   `components/usb_composite/include/usb_protocol.h`.
 
+## Factory reset (re-provisioning Wi-Fi)
+
+To forget the currently-stored Wi-Fi credentials and force the device
+back into BLE pairing mode, trigger one of these (they all land on the
+same core handler, wipe NVS credentials, then reboot):
+
+1. **Web dashboard** — on `http://<device-ip>/`, scroll to the
+   "Factory reset" panel and click the red button. A `confirm()`
+   dialog asks before sending.
+2. **BOOT button** — hold the on-board BOOT button for **≥3 seconds**.
+   Short presses are ignored so a casual touch during dev work won't
+   wipe credentials.
+3. **USB HID** — send report id `0x03` with a 1-byte payload `0xA5`
+   (magic byte guard).
+4. **USB CDC** — send SLIP-framed op `0x20` with a 1-byte payload
+   `0xA5`. The device replies with op `0x21` (ack) before restarting.
+
+After restart the device advertises as `ESP32-PWM` over BLE again
+(PoP `abcd1234`); pair from the ESP BLE Provisioning app.
+
+Manual fallback if the firmware is unreachable (wedged, bricked): on
+the desktop ESP-IDF shell, `idf.py -p COMn erase-flash` followed by
+a re-flash clears all NVS.
+
 ## Repository layout
 
 ```

@@ -327,9 +327,56 @@ header 的 transitive include。在 component CMakeLists 加：
   `components/usb_composite/include/usb_protocol.h`. These are the contract
   with the PC host tool (separate project, out of this repo's scope).
   Changing payload shapes is a breaking change.
-- **WebSocket JSON** contract: `{type: "set_pwm" | "set_rpm" | ...}` for
-  client→device, `{type: "status" | "ack" | "ota_progress"}` for
-  device→client. Documented inline in `components/net_dashboard/ws_handler.c`.
+- **WebSocket JSON** contract: `{type: "set_pwm" | "set_rpm" |
+  "factory_reset"}` for client→device, `{type: "status" | "ack" |
+  "ota_progress"}` for device→client. Documented inline in
+  `components/net_dashboard/ws_handler.c`.
+
+## Factory reset / reprovision (4 transports, 1 core)
+
+Instance of the "single handler, multiple frontends" invariant. Every
+reset entry point lands on `net_dashboard_factory_reset()`
+(`components/net_dashboard/include/net_dashboard.h`), which wipes
+stored Wi-Fi credentials via `network_prov_mgr_reset_wifi_provisioning()`
+and calls `esp_restart()`. Next boot the device sees no credentials →
+BLE re-advertises as `ESP32-PWM` for pairing.
+
+```
+Web UI confirm      ──┐
+USB HID 0x03 + 0xA5 ──┤
+USB CDC 0x20 + 0xA5 ──┼──► net_dashboard_factory_reset()
+BOOT long-press ≥3s ──┘       ├── prov_clear_credentials()
+                              └── esp_restart()
+```
+
+Design notes:
+
+- **Magic-byte guard on USB paths** (`USB_HID_FACTORY_RESET_MAGIC =
+  0xA5`, `USB_CDC_FACTORY_RESET_MAGIC = 0xA5`) so a stray zeroed
+  report can't wipe credentials. Web UI uses a JS `confirm()` dialog;
+  BOOT uses a 3-second hold (50 ms poll cadence in
+  `boot_button_task`, GPIO0 with internal pull-up).
+- **200 ms restart delay** in `factory_reset_task` lets each
+  transport's ack frame (WS `{type:"ack",op:"factory_reset"}`, CDC op
+  `0x21`, HID report `0x03` silent) flush before the reset interrupts
+  the connection.
+- **Idempotent** — second call inside the 200 ms window is a no-op
+  via a static volatile flag. BOOT long-press triggers spawn exactly
+  one reset even if the input glitches.
+- **GPIO0 runtime reuse**: GPIO0 is a strapping pin but only sampled
+  at reset for BOOT/DOWNLOAD selection. After boot it's a normal
+  input that any app can read.
+- **Cross-component coupling**: `usb_composite` REQUIRES
+  `net_dashboard` so HID/CDC callbacks can reach the reset API.
+  Direction is acceptable — `net_dashboard` is the "network state"
+  component and factory reset *is* a network-state concern
+  (credentials).
+- **HID descriptor size**: adding report id `0x03` grew
+  `usb_hid_report_descriptor` from 53 → 63 bytes. The
+  `_Static_assert(sizeof(...) == 63)` in
+  `usb_composite/usb_descriptors.c` and the `HID_REPORT_DESC_SIZE`
+  macro in `usb_composite.c:49` keep the two in sync — any future
+  descriptor edit triggers a compile error on mismatch.
 
 ## Interaction & communication preferences
 

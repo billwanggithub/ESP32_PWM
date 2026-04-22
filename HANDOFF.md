@@ -5,6 +5,34 @@ Branch: `chore/migrate-idf-v6.0` (off `feat/pwm-1hz-floor`)
 Working dir: `D:\github\ESP32_PWM`
 IDF: `C:\esp\v6.0\esp-idf` (was `C:\Espressif\frameworks\esp-idf-v5.5.1`)
 
+## 2026-04-22 晚 — factory reset / re-provisioning 四路打通 (commit `7ef24d6`)
+
+之前沒有 runtime 路徑可以清 Wi-Fi credentials，要重新 provision 一定得
+`idf.py erase-flash`。現在四種 transport 都能觸發，共用
+`net_dashboard_factory_reset()` 當單一 entry point:
+
+1. **Web UI** — dashboard 新增紅色 "Factory reset" 按鈕 + JS `confirm()`
+   dialog；WS 送 `{type:"factory_reset"}`，收到 ack 後 device 自己 reboot。
+2. **USB HID** — report id `0x03`，1 byte payload，magic `0xA5`。HID
+   descriptor 從 53 → 63 bytes，`_Static_assert` 守著。
+3. **USB CDC** — SLIP op `0x20` (H→D) + `0x21` (D→H ack)，同樣 magic
+   `0xA5` guard。
+4. **BOOT 按鈕 (GPIO0)** — 長按 ≥3 秒觸發，50 ms poll cadence。GPIO0 是
+   strapping pin 但 runtime 可以當一般 input 用。
+
+核心實作在 `components/net_dashboard/net_dashboard.c` 的
+`net_dashboard_factory_reset()` + `factory_reset_task` (200 ms delay 讓
+ack frame flush)；wipe 用 `network_prov_mgr_reset_wifi_provisioning()`；
+低階 wipe function 叫 `prov_clear_credentials()` 擺在 `prov_internal.h`
+(component-private)，public API 才是 `net_dashboard_factory_reset()`。
+
+CLAUDE.md 有完整 section ("Factory reset / reprovision")。README 有
+user-facing 使用說明。
+
+Cross-component coupling: `usb_composite` REQUIRES `net_dashboard`
+(就像之前已經 REQUIRES `ota_core` 一樣)；`net_dashboard` REQUIRES
+`esp_driver_gpio` 做 BOOT button watcher。
+
 ## ESP-IDF v6.0 migration — done & verified
 
 Migrated whole project up from v5.5.1 to v6.0. Hardware verification
