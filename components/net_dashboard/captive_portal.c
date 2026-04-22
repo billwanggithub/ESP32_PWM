@@ -167,14 +167,35 @@ static esp_err_t success_get(httpd_req_t *req)
     return httpd_resp_send(req, rendered, strlen(rendered));
 }
 
+// Tiny HTML body served to unknown URLs. Needs to be small and clearly
+// non-204: Android's captive-portal detector expects a 204 empty response
+// from the real internet; anything else (especially a 200 + small HTML
+// with a Location-style hint) triggers the "Sign in to Wi-Fi" UI.
+// The meta-refresh forces the browser to load / so even browsers that
+// ignore the captive-portal OS hint still end up on the setup page.
+static const char CAPTIVE_BODY[] =
+    "<!doctype html><html><head>"
+    "<meta http-equiv=\"refresh\" content=\"0; url=http://192.168.4.1/\">"
+    "</head><body><a href=\"http://192.168.4.1/\">Setup</a></body></html>";
+
 static esp_err_t catchall(httpd_req_t *req)
 {
-    // Any unknown URL — including Android / Apple / Windows captive-portal
-    // probes — gets 302 to root so the detector sees "this is not the
-    // expected 204 / success blob" and raises the sign-in UI.
-    httpd_resp_set_status(req, "302 Found");
-    httpd_resp_set_hdr(req, "Location", "/");
-    httpd_resp_send(req, NULL, 0);
+    // Samsung One UI (and stock Android 11+) expects the well-known probe
+    // URLs to respond with a status that is NOT 204. Serving a 200 with a
+    // small HTML body hits that non-204 rule and includes a body the
+    // detector can show to the user if it wants to. Serving 302 instead
+    // is technically valid but Samsung's detector sometimes follows the
+    // redirect silently and never raises the UI — 200 + body is more
+    // reliable across Android versions.
+    //
+    // The RFC 8908 "captive-portal" Link header is also honoured by
+    // modern Android; including it costs almost nothing.
+    httpd_resp_set_status(req, "200 OK");
+    httpd_resp_set_type(req, "text/html; charset=utf-8");
+    httpd_resp_set_hdr(req, "Cache-Control", "no-store");
+    httpd_resp_set_hdr(req, "Link",
+                      "<http://192.168.4.1/>; rel=\"captive-portal\"");
+    httpd_resp_send(req, CAPTIVE_BODY, sizeof(CAPTIVE_BODY) - 1);
     return ESP_OK;
 }
 
@@ -185,6 +206,16 @@ esp_err_t captive_portal_start(captive_portal_creds_cb_t cb)
     httpd_config_t cfg = HTTPD_DEFAULT_CONFIG();
     cfg.server_port = 80;
     cfg.uri_match_fn = httpd_uri_match_wildcard;   // lets catchall match *
+    // Samsung's captive-portal detector opens several parallel TCP
+    // connections to the probe URL within a few hundred milliseconds and
+    // tears down the ones that don't respond first. Default is 7 sockets
+    // which can be overrun during the probe burst, causing some probes
+    // to see RST and report "no captive portal." Bump to 13.
+    cfg.max_open_sockets = 13;
+    // Smaller recv timeout so slow-closing probe connections don't hold
+    // a socket for the default 5 s.
+    cfg.recv_wait_timeout = 2;
+    cfg.send_wait_timeout = 2;
 
     esp_err_t e = httpd_start(&s_httpd, &cfg);
     if (e != ESP_OK) return e;
