@@ -5,7 +5,7 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 ## Hardware target
 
 **YD-ESP32-S3-COREBOARD V1.4** (ESP32-S3-WROOM-1, 16 MB flash, 8 MB octal
-PSRAM — the N16R8 variant). Schematic is in `doc/YD-ESP32-S3-SCH-V1.4.pdf`;
+PSRAM — the N16R8 variant). Schematic is in `docs/YD-ESP32-S3-SCH-V1.4.pdf`;
 consult it before allocating new GPIOs. The full design spec lives at
 `C:\Users\billw\.claude\plans\read-the-project-plan-pure-eagle.md`.
 
@@ -118,29 +118,39 @@ Invariants:
 `pwm_gen_set()` writes new period and compare values; both latch on
 `MCPWM_TIMER_EVENT_EMPTY` (TEZ — timer equals zero) via the
 `update_cmp_on_tez` flag on the comparator. **Do not** call
-`mcpwm_timer_stop` / restart in the update path — that's where glitches
-come from.
+`mcpwm_timer_stop` / restart in the update path for same-band changes —
+that's where glitches come from.
 
-Frequency range is **153 Hz ~ 1 MHz**, constrained by the 16-bit MCPWM
-counter (`MCPWM_LL_MAX_COUNT_VALUE = 0x10000`). `resolution_hz = 10 MHz`
-is the compromise that lets the whole range fit:
+Frequency range is **1 Hz ~ 1 MHz**. The 16-bit MCPWM counter
+(`MCPWM_LL_MAX_COUNT_VALUE = 0x10000`) cannot span 6 decades with a
+single fixed `resolution_hz`, so `pwm_gen.c` defines a 3-band table and
+picks a band per call:
 
-| freq         | period_ticks | duty bits |
-|--------------|--------------|-----------|
-|       153 Hz | 65359        | 16        |
-|     1 000 Hz | 10000        | 13        |
-|    10 000 Hz | 1000         | 10        |
-|   100 000 Hz | 100          | 6.6       |
-| 1 000 000 Hz | 10           | 3.3       |
+| Band | resolution_hz | freq range     | period_ticks   | duty bits |
+|------|---------------|----------------|----------------|-----------|
+| HI   | 10 MHz        | 153 Hz – 1 MHz | 10 – 65359     | 3.3 – 16  |
+| MID  | 160 kHz       | 3 Hz – 152 Hz  | 1052 – 53333   | 10 – 16   |
+| LO   | 1 kHz         | 1 Hz – 2 Hz    | 500 – 1000     | 9 – 10    |
+
+**Same-band updates** (e.g. 500 Hz → 600 Hz) stay glitch-free via TEZ.
+**Band-crossing updates** (e.g. 200 Hz → 100 Hz) go through
+`reconfigure_for_band()`: stop → disable → delete timer → `mcpwm_new_timer`
+with the new `resolution_hz` → reconnect operator → re-arm comparator →
+enable → start. This produces a brief (~tens of µs) output discontinuity.
+Operator, comparator, and generator objects are retained across the
+reconfigure so their action config (high on TEZ, low on compare) does
+not need to be re-registered.
 
 The actual bit count at any freq is exposed via
 `pwm_gen_duty_resolution_bits()` for the UI. If future requirements need
-freq < 153 Hz, change `PWM_RESOLUTION_HZ` in `pwm_gen.c` (lower resolution
-→ wider freq range but fewer duty bits at the top end).
+sub-Hz, the MCPWM counter can't stretch further — an LEDC-based second
+generator or software timer would be needed.
 
 The "change-trigger output" on a separate GPIO is a software pulse from
-`control_task` after the write succeeds — not a hardware sync output. If
-jitter on that trigger matters, wire it to an MCPWM ETM event instead.
+`control_task` after the write succeeds — not a hardware sync output.
+Pulse width is clamped to [200 µs, 1000 µs] so it's always cleanly
+observable regardless of PWM freq. If jitter on that trigger matters,
+wire it to an MCPWM ETM event instead.
 
 ## Security posture — 目前 disabled
 
