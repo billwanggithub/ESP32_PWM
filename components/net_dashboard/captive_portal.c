@@ -2,24 +2,16 @@
 
 #include <string.h>
 #include <stdio.h>
-#include <sys/socket.h>
-#include <netinet/in.h>
-#include <arpa/inet.h>
 
 #include "esp_http_server.h"
 #include "esp_wifi.h"
 #include "esp_log.h"
 #include "cJSON.h"
-#include "freertos/FreeRTOS.h"
-#include "freertos/task.h"
 
 static const char *TAG = "captive";
 
 static httpd_handle_t               s_httpd;
 static captive_portal_creds_cb_t    s_cb;
-static TaskHandle_t                 s_tls_reject_task;
-static volatile bool                s_tls_reject_run;
-static int                          s_tls_reject_sock = -1;
 
 extern const char setup_html_start[]   asm("_binary_setup_html_start");
 extern const char setup_html_end[]     asm("_binary_setup_html_end");
@@ -186,57 +178,6 @@ static const char CAPTIVE_BODY[] =
     "<meta http-equiv=\"refresh\" content=\"0; url=http://192.168.4.1/\">"
     "</head><body><a href=\"http://192.168.4.1/\">Setup</a></body></html>";
 
-// Tiny TCP listener on port 443 that accept()s and immediately close()s.
-// Rationale: Samsung One UI prefers HTTPS captive-portal probes (port 443).
-// With nothing listening, the phone's probe gets TCP RST fast and falls
-// back to HTTP on port 80 — that's the behaviour we want. But some
-// Android networking stacks interpret "port 443 fully closed" as "this
-// network doesn't route" and skip the captive-portal UI entirely. By
-// accepting the connection and closing it cleanly (FIN), we're saying
-// "port 443 exists here but has no TLS" — that's an unambiguous "captive
-// portal probable" signal.
-static void tls_reject_task(void *arg)
-{
-    s_tls_reject_sock = socket(AF_INET, SOCK_STREAM, IPPROTO_TCP);
-    if (s_tls_reject_sock < 0) { vTaskDelete(NULL); return; }
-
-    int yes = 1;
-    setsockopt(s_tls_reject_sock, SOL_SOCKET, SO_REUSEADDR, &yes, sizeof(yes));
-
-    struct sockaddr_in addr = {
-        .sin_family      = AF_INET,
-        .sin_port        = htons(443),
-        .sin_addr.s_addr = htonl(INADDR_ANY),
-    };
-    if (bind(s_tls_reject_sock, (struct sockaddr *)&addr, sizeof(addr)) < 0) {
-        ESP_LOGE(TAG, "tls-reject bind 443 failed: errno=%d", errno);
-        close(s_tls_reject_sock); s_tls_reject_sock = -1;
-        vTaskDelete(NULL); return;
-    }
-    if (listen(s_tls_reject_sock, 4) < 0) {
-        close(s_tls_reject_sock); s_tls_reject_sock = -1;
-        vTaskDelete(NULL); return;
-    }
-
-    // Short accept timeout so the task can exit on shutdown.
-    struct timeval tv = { .tv_sec = 0, .tv_usec = 500 * 1000 };
-    setsockopt(s_tls_reject_sock, SOL_SOCKET, SO_RCVTIMEO, &tv, sizeof(tv));
-
-    ESP_LOGI(TAG, "tls-reject up (TCP:443 accept+close)");
-
-    while (s_tls_reject_run) {
-        struct sockaddr_in peer;
-        socklen_t peer_len = sizeof(peer);
-        int c = accept(s_tls_reject_sock, (struct sockaddr *)&peer, &peer_len);
-        if (c >= 0) close(c);
-    }
-
-    close(s_tls_reject_sock);
-    s_tls_reject_sock = -1;
-    s_tls_reject_task = NULL;
-    vTaskDelete(NULL);
-}
-
 static esp_err_t catchall(httpd_req_t *req)
 {
     // Samsung One UI (and stock Android 11+) expects the well-known probe
@@ -306,24 +247,11 @@ esp_err_t captive_portal_start(captive_portal_creds_cb_t cb)
     }
 
     ESP_LOGI(TAG, "captive portal up on :80");
-
-    // Start the port-443 accept-and-close helper so Samsung's HTTPS
-    // captive-portal probe fails fast via clean FIN instead of timing
-    // out — pushes the phone into its HTTP fallback probe quickly.
-    s_tls_reject_run = true;
-    xTaskCreate(tls_reject_task, "tls_reject", 2560, NULL, 2, &s_tls_reject_task);
     return ESP_OK;
 }
 
 void captive_portal_stop(void)
 {
-    if (s_tls_reject_run) {
-        s_tls_reject_run = false;
-        // Task will exit within one accept timeout (~500 ms).
-        for (int i = 0; i < 20 && s_tls_reject_task != NULL; i++) {
-            vTaskDelay(pdMS_TO_TICKS(50));
-        }
-    }
     if (!s_httpd) return;
     httpd_stop(s_httpd);
     s_httpd = NULL;
