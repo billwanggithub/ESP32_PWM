@@ -3,6 +3,7 @@ idf_component_register(
                 "ws_handler.c"
                 "provisioning.c"
                 "dns_hijack.c"
+                "mdns_svc.c"
     INCLUDE_DIRS "include"
     PRIV_INCLUDE_DIRS "."
     REQUIRES    esp_http_server
