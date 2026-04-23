@@ -17,6 +17,14 @@
 #define RPM_FIFO_LEN   128
 #define HISTORY_LEN    256
 
+// ISR edge-rate ceiling. Real fan tachs top out at ~1 kHz (2 pulses/rev ×
+// ~30k RPM); 10 kHz gives 10× headroom. Above this the ISR skips the
+// expensive esp_timer stop/start + notify path, because at 500 kHz
+// loopback the per-edge esp_timer spinlock contention triggers the
+// Interrupt WDT (pwm_gen output wired to cap input hits this).
+// 100 µs × 160 MHz = 16'000 capture ticks.
+#define MIN_EDGE_PERIOD_TICKS  16000u
+
 // A period value equal to rpm_timeout_us (in clock ticks) is our "signal lost"
 // sentinel. The converter turns it into 0.0f RPM.
 #define SENTINEL_RPM_VALUE 0.0f
@@ -139,12 +147,20 @@ static bool IRAM_ATTR on_cap_edge(mcpwm_cap_channel_handle_t chan,
     BaseType_t hpw = pdFALSE;
     uint32_t cap = edata->cap_value;
 
+    // Edge-rate guard: at very high input rates (e.g. pwm output looped
+    // back to cap input at 500 kHz), per-edge esp_timer_stop/start_once
+    // contends the global esp_timer spinlock badly enough to trip IWDT.
+    // Drop edges faster than MIN_EDGE_PERIOD_TICKS without touching the
+    // expensive paths; keep prev_cap_value current so the next
+    // in-range period is still measured correctly.
     if (s_cap.have_prev) {
         uint32_t period = cap - s_cap.prev_cap_value;  // unsigned wrap safe
-        if (period > 0) {
-            ring_u32_push_from_isr(&s_freq_fifo, period);
-            vTaskNotifyGiveFromISR(s_cap.converter_task, &hpw);
+        if (period < MIN_EDGE_PERIOD_TICKS) {
+            s_cap.prev_cap_value = cap;
+            return false;
         }
+        ring_u32_push_from_isr(&s_freq_fifo, period);
+        vTaskNotifyGiveFromISR(s_cap.converter_task, &hpw);
     }
     s_cap.prev_cap_value = cap;
     s_cap.have_prev = true;
