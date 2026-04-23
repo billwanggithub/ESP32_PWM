@@ -106,7 +106,7 @@ static esp_err_t save_wifi_post(httpd_req_t *req)
     if (e == ESP_OK) {
         cJSON *resp = cJSON_CreateObject();
         cJSON_AddStringToObject(resp, "ip", out.ip);
-        cJSON_AddStringToObject(resp, "mdns", out.mdns ? out.mdns : "esp32-pwm.local");
+        cJSON_AddStringToObject(resp, "mdns", out.mdns ? out.mdns : "fan-testkit.local");
         char *s = cJSON_PrintUnformatted(resp);
         httpd_resp_set_type(req, "application/json");
         httpd_resp_sendstr(req, s);
@@ -148,7 +148,7 @@ static esp_err_t success_get(httpd_req_t *req)
 
     // Naive replace (each token appears twice in the template). Do them
     // one at a time; capacity check above guarantees room.
-    const char *repl[][2] = { {"{{IP}}", ip_buf}, {"{{MDNS}}", "esp32-pwm.local"} };
+    const char *repl[][2] = { {"{{IP}}", ip_buf}, {"{{MDNS}}", "fan-testkit.local"} };
     for (int r = 0; r < 2; r++) {
         const char *tok = repl[r][0];
         const char *val = repl[r][1];

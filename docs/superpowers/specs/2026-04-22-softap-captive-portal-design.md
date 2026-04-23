@@ -67,7 +67,7 @@ boot
  │                                                   DONE
  │
  └─ no ──► set_mode(AP)
-           AP SSID "ESP32-PWM-setup", open, ch 1
+           AP SSID "Fan-TestKit-setup", open, ch 1
            esp_wifi_start()
            dns_hijack_start()      (UDP:53 on AP netif)
            captive_portal_start()  (HTTP:80 on AP netif)
@@ -80,7 +80,7 @@ boot
               │
               ├─ on GOT_IP:
               │     respond to pending POST 200
-              │       {ip:"x.x.x.x", mdns:"esp32-pwm.local"}
+              │       {ip:"x.x.x.x", mdns:"fan-testkit.local"}
               │     arm 30-s oneshot timer
               │     on timer expiry:
               │       dns_hijack_stop()
@@ -109,7 +109,7 @@ All changes scoped to `components/net_dashboard/`.
 | `prov_internal.h`                 | unchanged | `provisioning_run_and_connect()`, `prov_clear_credentials()` signatures stay |
 | `captive_portal.c` / `.h`         | **new**   | HTTP handlers + lifecycle                        |
 | `dns_hijack.c` / `.h`             | **new**   | UDP:53 catch-all DNS server                      |
-| `mdns_svc.c` / `.h`               | **new**   | `esp32-pwm.local` advertisement                  |
+| `mdns_svc.c` / `.h`               | **new**   | `fan-testkit.local` advertisement                  |
 | `assets/setup_page.html`          | **new**   | SSID scan list + credential form                 |
 | `assets/success_page.html`        | **new**   | Shows IP + mDNS link                             |
 | `CMakeLists.txt`                  | **edit**  | Drop `network_provisioning` REQUIRES; add        |
@@ -182,7 +182,7 @@ Plain HTML. Server-side substitution of two placeholders when served
 
 ```
 {{IP}}    → 192.168.1.47
-{{MDNS}}  → esp32-pwm.local
+{{MDNS}}  → fan-testkit.local
 ```
 
 Content (ASCII only, per project convention — no emoji):
@@ -198,8 +198,8 @@ Reconnect your phone to your home Wi-Fi, then tap either link:
 
 ### mDNS service
 
-Started after GOT_IP in STA mode. Hostname `esp32-pwm`, instance name
-"ESP32-PWM Dashboard", service `_http._tcp` on port 80. One call to
+Started after GOT_IP in STA mode. Hostname `fan-testkit`, instance name
+"Fan-TestKit Dashboard", service `_http._tcp` on port 80. One call to
 `mdns_init()` + `mdns_hostname_set()` + `mdns_service_add()`. Stopped
 and restarted if the device's IP changes (rare on a DHCP-stable LAN;
 no special handling beyond what the mDNS component does itself).
@@ -207,7 +207,7 @@ no special handling beyond what the mDNS component does itself).
 ## Data Flow — Happy Path
 
 ```
-phone joins "ESP32-PWM-setup"
+phone joins "Fan-TestKit-setup"
    │
    ▼
 Android probes connectivitycheck.gstatic.com
@@ -264,13 +264,13 @@ user reconnects phone to home Wi-Fi, taps link, dashboard loads
 ## Testing Plan
 
 1. Fresh flash on a board whose Wi-Fi NVS has been erased.
-   - Phone joins `ESP32-PWM-setup`.
+   - Phone joins `Fan-TestKit-setup`.
    - Android notification "Sign in to Wi-Fi network" appears within
      ~5 s of association.
    - Tapping it opens the setup page (or the browser opens on its own
      on newer Android versions).
 2. Submit valid creds.
-   - Success page renders with correct IP and `esp32-pwm.local`.
+   - Success page renders with correct IP and `fan-testkit.local`.
    - Phone reconnects to home Wi-Fi.
    - Tapping the mDNS link opens the dashboard (Chrome on Android
      resolves `.local`).

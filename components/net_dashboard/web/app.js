@@ -65,7 +65,7 @@
   factoryBtn.addEventListener('click', () => {
     const ok = confirm(
       'Factory reset: clear Wi-Fi credentials and reboot?\n\n' +
-      'The device will disconnect and advertise ESP32-PWM over BLE for re-provisioning.'
+      'The device will disconnect and open the Fan-TestKit-setup SoftAP for re-provisioning.'
     );
     if (!ok) return;
     factoryBtn.disabled = true;

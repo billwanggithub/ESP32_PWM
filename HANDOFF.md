@@ -1,8 +1,8 @@
-# Hand-off — ESP32-S3 PWM + RPM firmware
+# Hand-off — Fan-TestKit firmware (ESP32-S3 PWM + RPM)
 
 Date: 2026-04-22 (晚間，IDF v6.0 migration)
 Branch: `chore/migrate-idf-v6.0` (off `feat/pwm-1hz-floor`)
-Working dir: `D:\github\ESP32_PWM`
+Working dir: `D:\github\Fan-TestKit-ESP32`
 IDF: `C:\esp\v6.0\esp-idf` (was `C:\Espressif\frameworks\esp-idf-v5.5.1`)
 
 ## 2026-04-22 — provisioning migration: BLE → SoftAP captive portal
@@ -13,16 +13,16 @@ flow (components/net_dashboard/captive_portal.c, dns_hijack.c,
 mdns_svc.c). Saves ~60 KB flash, removes the Espressif BLE Provisioning
 Android app requirement.
 
-User flow: on boot no creds → AP `ESP32-PWM-setup` + DNS hijack (every
+User flow: on boot no creds → AP `Fan-TestKit-setup` + DNS hijack (every
 query → 192.168.4.1) + catch-all HTTP 200 with meta-refresh + RFC 8908
 `Link: rel="captive-portal"` header. After submit + STA connect, success
-page shows `esp32-pwm.local` and raw DHCP IP. AP torn down ~25 s later.
+page shows `fan-testkit.local` and raw DHCP IP. AP torn down ~25 s later.
 Factory reset path (`prov_clear_credentials` → `esp_wifi_restore`)
 unchanged for callers.
 
 Hardware validation on 2026-04-22 (Samsung phone, One UI):
 
-- PC (Windows with Bonjour): `http://esp32-pwm.local/` resolves, dashboard
+- PC (Windows with Bonjour): `http://fan-testkit.local/` resolves, dashboard
   loads.
 - Samsung phone, STA side: raw-IP link works; `.local` mDNS does NOT
   resolve (Chrome on Android doesn't do mDNS — long-standing Chromium
@@ -137,7 +137,7 @@ enumerated, BLE provisioning still works.
   `C:\Espressif\frameworks\esp-idf-v5.5.1` for fallback (don't activate
   both at once — Python venv collision).
 - Desktop shortcut **"ESP-IDF 6.0 PWM Project"** opens new PowerShell
-  with v6.0 env active, cwd at `D:\github\ESP32_PWM`. Created via
+  with v6.0 env active, cwd at `D:\github\Fan-TestKit-ESP32`. Created via
   WScript.Shell COM in user `Desktop`.
 - PowerShell profile alias `esp6` (and `esp6 pwm`) added to
   `D:\Documents\WindowsPowerShell\Microsoft.PowerShell_profile.ps1`.
@@ -233,7 +233,7 @@ Chip: ESP32-S3 (QFN56 rev v0.2), 16 MB flash, 8 MB octal PSRAM
 - **Boot**: ROM → bootloader → app，完整到 `main_task: Calling app_main()`
 - **PSRAM**: 8 MB octal PSRAM @ 80 MHz init OK，heap allocator 正確接上
 - **Wi-Fi STA**: 透過 BLE provisioning 註冊 SSID 成功，DHCP 拿到 IP
-- **BLE (NimBLE)**: `wifi_prov_scheme_ble` advertising `ESP32-PWM`，PoP
+- **BLE (NimBLE)**: `wifi_prov_scheme_ble` advertising `Fan-TestKit`，PoP
   `abcd1234`，provisioning 完畢 `FREE_BTDM` 釋放 controller
 - **HTTP + WebSocket**: `http://<ip>/` 吐出 dashboard，`/ws` 101 Switching
   Protocols，`set_pwm` / `set_rpm` JSON → `ctrl_cmd_queue` → `control_task`
@@ -351,7 +351,7 @@ App 本身被設計成 USB init 失敗 graceful degradation — 即使 Bug 4 沒
   （要改回：`git config --global credential.helper wincred`）
 - `gh` CLI active account: `billwang-gmt-project` → `billwanggithub`
   （要切回：`gh auth switch --user billwang-gmt-project`）
-- Remote `origin` 指向 `https://github.com/billwanggithub/ESP32_PWM.git`
+- Remote `origin` 指向 `git@github.com:billwanggithub/Fan-TestKit-ESP32.git` (原 `ESP32_PWM` repo 在 github.com rename 過來，history 一樣)
   （不變，只是第一次 push force-push 過，原本 remote 的孤立
   `Initial commit` 被蓋掉）
 

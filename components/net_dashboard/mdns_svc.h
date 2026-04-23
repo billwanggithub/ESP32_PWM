@@ -6,7 +6,7 @@
 extern "C" {
 #endif
 
-// Start mDNS advertising "esp32-pwm.local" and an _http._tcp service on
+// Start mDNS advertising "fan-testkit.local" and an _http._tcp service on
 // port 80. Call after IP_EVENT_STA_GOT_IP.
 esp_err_t mdns_svc_start(void);
 

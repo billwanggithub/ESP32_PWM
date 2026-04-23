@@ -12,10 +12,10 @@ esp_err_t mdns_svc_start(void)
         ESP_LOGE(TAG, "mdns_init: %s", esp_err_to_name(e));
         return e;
     }
-    ESP_ERROR_CHECK(mdns_hostname_set("esp32-pwm"));
-    ESP_ERROR_CHECK(mdns_instance_name_set("ESP32-PWM Dashboard"));
+    ESP_ERROR_CHECK(mdns_hostname_set("fan-testkit"));
+    ESP_ERROR_CHECK(mdns_instance_name_set("Fan-TestKit Dashboard"));
     ESP_ERROR_CHECK(mdns_service_add(NULL, "_http", "_tcp", 80, NULL, 0));
-    ESP_LOGI(TAG, "mdns up: esp32-pwm.local");
+    ESP_LOGI(TAG, "mdns up: fan-testkit.local");
     return ESP_OK;
 }
 

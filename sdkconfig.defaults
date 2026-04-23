@@ -74,7 +74,7 @@ CONFIG_TINYUSB_HID_COUNT=1
 CONFIG_TINYUSB_CDC_ENABLED=y
 CONFIG_TINYUSB_CDC_COUNT=1
 
-# mDNS service for dashboard discovery (`esp32-pwm.local`). Default
+# mDNS service for dashboard discovery (`fan-testkit.local`). Default
 # MAX_SERVICES=10 is fine, but we pin it explicitly so cleaning
 # sdkconfig doesn't silently drop below 1.
 CONFIG_MDNS_MAX_SERVICES=4

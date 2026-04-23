@@ -478,7 +478,7 @@ Expected: boot logs show `pwm_gen: init ok: … freq=1000 duty=0.0% res=10000000
 
 - [ ] **Step 3: Sweep test via CLI**
 
-At the `esp32-pwm>` prompt, run each of:
+At the `fan-testkit>` prompt, run each of:
 
 ```
 pwm 1 50

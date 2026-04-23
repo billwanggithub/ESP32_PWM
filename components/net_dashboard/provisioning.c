@@ -79,7 +79,7 @@ static esp_err_t on_credentials(const char *ssid, const char *password,
         // snprintf instead of strncpy so gcc -Wstringop-truncation stays
         // happy; out->ip is zero-init'd by the caller.
         snprintf(out->ip, sizeof(out->ip), "%s", s_last_ip);
-        out->mdns = "esp32-pwm.local";
+        out->mdns = "fan-testkit.local";
         return ESP_OK;
     }
 
@@ -113,8 +113,8 @@ static esp_err_t run_softap_portal(void)
     esp_netif_create_default_wifi_ap();
 
     wifi_config_t ap = {0};
-    strcpy((char *)ap.ap.ssid, "ESP32-PWM-setup");
-    ap.ap.ssid_len       = strlen("ESP32-PWM-setup");
+    strcpy((char *)ap.ap.ssid, "Fan-TestKit-setup");
+    ap.ap.ssid_len       = strlen("Fan-TestKit-setup");
     ap.ap.channel        = 1;
     ap.ap.authmode       = WIFI_AUTH_OPEN;
     ap.ap.max_connection = 4;
@@ -126,7 +126,7 @@ static esp_err_t run_softap_portal(void)
     ESP_ERROR_CHECK(dns_hijack_start());
     ESP_ERROR_CHECK(captive_portal_start(on_credentials));
 
-    ESP_LOGI(TAG, "SoftAP 'ESP32-PWM-setup' up — waiting for credentials");
+    ESP_LOGI(TAG, "SoftAP 'Fan-TestKit-setup' up — waiting for credentials");
 
     // Block until on_credentials succeeds — sets EV_GOT_IP.
     xEventGroupWaitBits(s_ev, EV_GOT_IP, pdFALSE, pdTRUE, portMAX_DELAY);

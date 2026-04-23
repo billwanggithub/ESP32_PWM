@@ -18,7 +18,7 @@ extern "C" {
 // POST /save_wifi is sent after the callback returns.
 typedef struct {
     char        ip[16];      // dotted-quad, filled on success
-    const char *mdns;        // e.g. "esp32-pwm.local" — filled on success
+    const char *mdns;        // e.g. "fan-testkit.local" — filled on success
     char        err_msg[64]; // filled on failure
 } captive_portal_result_t;
 

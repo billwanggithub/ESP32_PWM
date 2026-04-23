@@ -1,4 +1,4 @@
-menu "ESP32 PWM App"
+menu "Fan-TestKit App"
 
     config APP_PWM_OUTPUT_GPIO
         int "PWM output GPIO"

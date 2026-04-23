@@ -69,7 +69,7 @@ static const uint8_t s_configuration_descriptor[] = {
 static const char *s_string_desc[] = {
     (char[]){ 0x09, 0x04 },    // 0: langid = en-US
     "VCC-GND",                 // 1: Manufacturer
-    "ESP32-S3 PWM + RPM",      // 2: Product
+    "Fan-TestKit",             // 2: Product
     "0001",                    // 3: Serial
     "Control HID",             // 4: HID interface name
     "Firmware + Log CDC",      // 5: CDC interface name

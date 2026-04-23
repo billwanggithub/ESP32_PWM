@@ -21,6 +21,6 @@ dependencies:
     version: "^1.7.19"
   # mdns was a built-in component in IDF v5.x but moved to the component
   # manager in v6.0. Used by components/net_dashboard/mdns_svc.c to
-  # advertise `esp32-pwm.local` once STA is up.
+  # advertise `fan-testkit.local` once STA is up.
   espressif/mdns:
     version: "^1.8.0"

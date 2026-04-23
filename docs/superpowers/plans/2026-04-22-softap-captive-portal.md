@@ -2,9 +2,9 @@
 
 > **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) or superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [ ]`) syntax for tracking.
 
-**Goal:** Replace BLE-based Wi-Fi provisioning with a SoftAP + captive-portal flow so the phone's browser auto-opens (via Android's captive-portal detector), then shows both `http://esp32-pwm.local/` and the raw IP on success.
+**Goal:** Replace BLE-based Wi-Fi provisioning with a SoftAP + captive-portal flow so the phone's browser auto-opens (via Android's captive-portal detector), then shows both `http://fan-testkit.local/` and the raw IP on success.
 
-**Architecture:** On boot, [components/net_dashboard/provisioning.c](components/net_dashboard/provisioning.c) checks Wi-Fi NVS. If credentials exist → STA + mDNS + existing dashboard. Otherwise → SoftAP `ESP32-PWM-setup` + captive-portal HTTP server on `192.168.4.1` + DNS hijack on UDP:53 answering every query with `192.168.4.1`. On credentials submit, briefly enter APSTA, wait for `IP_EVENT_STA_GOT_IP`, serve a success page, then tear down AP after 30 s grace and bring up the dashboard. Drop the `espressif/network_provisioning` component and BLE entirely.
+**Architecture:** On boot, [components/net_dashboard/provisioning.c](components/net_dashboard/provisioning.c) checks Wi-Fi NVS. If credentials exist → STA + mDNS + existing dashboard. Otherwise → SoftAP `Fan-TestKit-setup` + captive-portal HTTP server on `192.168.4.1` + DNS hijack on UDP:53 answering every query with `192.168.4.1`. On credentials submit, briefly enter APSTA, wait for `IP_EVENT_STA_GOT_IP`, serve a success page, then tear down AP after 30 s grace and bring up the dashboard. Drop the `espressif/network_provisioning` component and BLE entirely.
 
 **Tech Stack:** ESP-IDF v6.0, `esp_wifi` (SoftAP + STA), `esp_http_server`, raw UDP sockets (lwIP) for DNS hijack, `mdns` component for hostname advertisement, `cJSON` for request/response bodies.
 
@@ -90,7 +90,7 @@ Delete these blocks from `sdkconfig.defaults`:
 Lines containing the BT section (from the `# Bluetooth (BLE) for network_provisioning` comment through `CONFIG_BT_CONTROLLER_ENABLED=y`) AND the `# network_provisioning` section AND the `# protocomm security version 1` section. Replace with:
 
 ```
-# mDNS service for dashboard discovery (`esp32-pwm.local`). Default
+# mDNS service for dashboard discovery (`fan-testkit.local`). Default
 # MAX_SERVICES=10 is fine, but we pin it explicitly so cleaning
 # sdkconfig doesn't silently drop below 1.
 CONFIG_MDNS_MAX_SERVICES=4
@@ -122,7 +122,7 @@ idf_component_register(
                 esp_driver_gpio
                 # SoftAP captive portal DNS hijack (raw UDP socket).
                 lwip
-                # mDNS advertisement of esp32-pwm.local after provisioning.
+                # mDNS advertisement of fan-testkit.local after provisioning.
                 mdns
     EMBED_TXTFILES "web/index.html"
                    "web/app.js"
@@ -479,7 +479,7 @@ setup AP."
 
 ## Task 4: mDNS service wrapper
 
-**Why:** After successful provisioning the user expects `http://esp32-pwm.local/` to work. Wrapping the mDNS init in two functions keeps `provisioning.c` tidy and gives us a single teardown point if we need to restart mDNS on IP change later.
+**Why:** After successful provisioning the user expects `http://fan-testkit.local/` to work. Wrapping the mDNS init in two functions keeps `provisioning.c` tidy and gives us a single teardown point if we need to restart mDNS on IP change later.
 
 **Files:**
 - Create: `components/net_dashboard/mdns_svc.h`
@@ -497,7 +497,7 @@ setup AP."
 extern "C" {
 #endif
 
-// Start mDNS advertising "esp32-pwm.local" and an _http._tcp service on
+// Start mDNS advertising "fan-testkit.local" and an _http._tcp service on
 // port 80. Call after IP_EVENT_STA_GOT_IP.
 esp_err_t mdns_svc_start(void);
 
@@ -526,10 +526,10 @@ esp_err_t mdns_svc_start(void)
         ESP_LOGE(TAG, "mdns_init: %s", esp_err_to_name(e));
         return e;
     }
-    ESP_ERROR_CHECK(mdns_hostname_set("esp32-pwm"));
-    ESP_ERROR_CHECK(mdns_instance_name_set("ESP32-PWM Dashboard"));
+    ESP_ERROR_CHECK(mdns_hostname_set("fan-testkit"));
+    ESP_ERROR_CHECK(mdns_instance_name_set("Fan-TestKit Dashboard"));
     ESP_ERROR_CHECK(mdns_service_add(NULL, "_http", "_tcp", 80, NULL, 0));
-    ESP_LOGI(TAG, "mdns up: esp32-pwm.local");
+    ESP_LOGI(TAG, "mdns up: fan-testkit.local");
     return ESP_OK;
 }
 
@@ -555,7 +555,7 @@ Expected: success.
 
 ```
 git add components/net_dashboard/mdns_svc.h components/net_dashboard/mdns_svc.c components/net_dashboard/CMakeLists.txt
-git commit -m "feat(prov): mDNS service wrapper for esp32-pwm.local
+git commit -m "feat(prov): mDNS service wrapper for fan-testkit.local
 
 Two-function shim around esp-idf mdns component. Called from
 provisioning.c after GOT_IP."
@@ -581,7 +581,7 @@ Create `components/net_dashboard/web/setup.html`:
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
-<title>ESP32-PWM Setup</title>
+<title>Fan-TestKit Setup</title>
 <style>
 body { font-family: sans-serif; max-width: 420px; margin: 1em auto; padding: 0 1em; }
 h1 { font-size: 1.3em; }
@@ -595,7 +595,7 @@ button:disabled { background: #888; }
 </style>
 </head>
 <body>
-<h1>ESP32-PWM Setup</h1>
+<h1>Fan-TestKit Setup</h1>
 <p class="hint">Choose your home Wi-Fi and enter the password. The device will then switch off this setup network and join your Wi-Fi.</p>
 
 <label for="ssid">Wi-Fi network</label>
@@ -732,7 +732,7 @@ to /save_wifi, redirects to /success on 200."
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
-<title>ESP32-PWM Setup Complete</title>
+<title>Fan-TestKit Setup Complete</title>
 <style>
 body { font-family: sans-serif; max-width: 420px; margin: 1em auto; padding: 0 1em; }
 h1 { font-size: 1.3em; }
@@ -816,7 +816,7 @@ extern "C" {
 // POST /save_wifi is sent after the callback returns.
 typedef struct {
     char        ip[16];      // dotted-quad, filled on success
-    const char *mdns;        // e.g. "esp32-pwm.local" — filled on success
+    const char *mdns;        // e.g. "fan-testkit.local" — filled on success
     char        err_msg[64]; // filled on failure
 } captive_portal_result_t;
 
@@ -940,7 +940,7 @@ static esp_err_t save_wifi_post(httpd_req_t *req)
     if (e == ESP_OK) {
         cJSON *resp = cJSON_CreateObject();
         cJSON_AddStringToObject(resp, "ip", out.ip);
-        cJSON_AddStringToObject(resp, "mdns", out.mdns ? out.mdns : "esp32-pwm.local");
+        cJSON_AddStringToObject(resp, "mdns", out.mdns ? out.mdns : "fan-testkit.local");
         char *s = cJSON_PrintUnformatted(resp);
         httpd_resp_set_type(req, "application/json");
         httpd_resp_sendstr(req, s);
@@ -981,7 +981,7 @@ static esp_err_t success_get(httpd_req_t *req)
 
     // Naive replace (each token appears twice in the template). Do them
     // one at a time; capacity check above guarantees room.
-    const char *repl[][2] = { {"{{IP}}", ip_buf}, {"{{MDNS}}", "esp32-pwm.local"} };
+    const char *repl[][2] = { {"{{IP}}", ip_buf}, {"{{MDNS}}", "fan-testkit.local"} };
     for (int r = 0; r < 2; r++) {
         const char *tok = repl[r][0];
         const char *val = repl[r][1];
@@ -1162,7 +1162,7 @@ static esp_err_t on_credentials(const char *ssid, const char *password,
                                            pdTRUE, pdFALSE, pdMS_TO_TICKS(20000));
     if (bits & EV_GOT_IP) {
         strncpy(out->ip, s_last_ip, sizeof(out->ip) - 1);
-        out->mdns = "esp32-pwm.local";
+        out->mdns = "fan-testkit.local";
         return ESP_OK;
     }
 
@@ -1193,8 +1193,8 @@ static esp_err_t run_softap_portal(void)
     esp_netif_create_default_wifi_ap();
 
     wifi_config_t ap = {0};
-    strcpy((char *)ap.ap.ssid, "ESP32-PWM-setup");
-    ap.ap.ssid_len       = strlen("ESP32-PWM-setup");
+    strcpy((char *)ap.ap.ssid, "Fan-TestKit-setup");
+    ap.ap.ssid_len       = strlen("Fan-TestKit-setup");
     ap.ap.channel        = 1;
     ap.ap.authmode       = WIFI_AUTH_OPEN;
     ap.ap.max_connection = 4;
@@ -1206,7 +1206,7 @@ static esp_err_t run_softap_portal(void)
     ESP_ERROR_CHECK(dns_hijack_start());
     ESP_ERROR_CHECK(captive_portal_start(on_credentials));
 
-    ESP_LOGI(TAG, "SoftAP 'ESP32-PWM-setup' up — waiting for credentials");
+    ESP_LOGI(TAG, "SoftAP 'Fan-TestKit-setup' up — waiting for credentials");
 
     // Block until on_credentials succeeds — sets EV_GOT_IP.
     xEventGroupWaitBits(s_ev, EV_GOT_IP, pdFALSE, pdTRUE, portMAX_DELAY);
@@ -1265,7 +1265,7 @@ git add components/net_dashboard/provisioning.c
 git commit -m "feat(prov): SoftAP + captive portal state machine
 
 Replace BLE flow: on boot, if Wi-Fi NVS has credentials go STA +
-mDNS + dashboard. Otherwise bring up AP 'ESP32-PWM-setup', hijack
+mDNS + dashboard. Otherwise bring up AP 'Fan-TestKit-setup', hijack
 DNS, serve captive portal. On /save_wifi success, wait 30 s so the
 phone can load /success, then tear down AP and hand off to dashboard."
 ```
@@ -1290,7 +1290,7 @@ Expected log on next boot: `prov: no credentials → SoftAP + captive portal` fo
 
 - [ ] **Step 2: Phone joins the AP**
 
-On the Android phone: Settings → Wi-Fi → pick `ESP32-PWM-setup`. It's an open network.
+On the Android phone: Settings → Wi-Fi → pick `Fan-TestKit-setup`. It's an open network.
 
 **Expected:** within 5-10 s, Android shows a notification "Sign in to Wi-Fi network" and/or auto-opens a browser pointing at `http://192.168.4.1/` (or any URL — DNS hijack routes it there).
 
@@ -1303,7 +1303,7 @@ On the setup page, select your home SSID (or type it via "Other..."), enter the 
 **Expected:**
 - Button flips to "Connecting... (up to 20 s)".
 - Within 20 s, browser redirects to `/success`.
-- Success page displays `http://esp32-pwm.local/` and the raw IP assigned by DHCP (e.g. `http://192.168.1.47/`).
+- Success page displays `http://fan-testkit.local/` and the raw IP assigned by DHCP (e.g. `http://192.168.1.47/`).
 
 Serial log on device:
 ```
@@ -1313,19 +1313,19 @@ prov: got ip: 192.168.1.47
 
 - [ ] **Step 4: Reconnect phone to home Wi-Fi, open dashboard**
 
-Disconnect the phone from `ESP32-PWM-setup` and reconnect to the home Wi-Fi. Open Chrome, tap the mDNS link from the success page.
+Disconnect the phone from `Fan-TestKit-setup` and reconnect to the home Wi-Fi. Open Chrome, tap the mDNS link from the success page.
 
-**Expected:** dashboard loads over `esp32-pwm.local`. If it doesn't resolve (some Android builds), tap the raw IP link — expected to work unconditionally.
+**Expected:** dashboard loads over `fan-testkit.local`. If it doesn't resolve (some Android builds), tap the raw IP link — expected to work unconditionally.
 
 - [ ] **Step 5: Power-cycle, verify STA-only reboot**
 
 Unplug, replug. Watch serial monitor.
 
-**Expected:** `prov: credentials present → STA`, followed by `prov: got ip: ...`, and NO SoftAP (`ESP32-PWM-setup`) visible in the phone's Wi-Fi list.
+**Expected:** `prov: credentials present → STA`, followed by `prov: got ip: ...`, and NO SoftAP (`Fan-TestKit-setup`) visible in the phone's Wi-Fi list.
 
 - [ ] **Step 6: Test wrong-password rejection**
 
-Factory-reset again. Join `ESP32-PWM-setup`. Submit an intentionally wrong password.
+Factory-reset again. Join `Fan-TestKit-setup`. Submit an intentionally wrong password.
 
 **Expected:** after ~20 s the setup page shows "Failed: auth/connect failed" (or "timeout (20 s)"). Retry with correct password in the same session works without a reboot.
 
@@ -1366,8 +1366,8 @@ Find the `## Component manager dependencies` section in `CLAUDE.md`. Replace the
 
 Wi-Fi provisioning 現在走 SoftAP + captive portal，不再依賴
 `network_provisioning` component — 板子第一次 boot 沒有 creds 時會開
-`ESP32-PWM-setup` 這個 open AP，phone 接上後 Android captive-portal
-detector 會自動跳 browser。成功後 success page 同時秀 `esp32-pwm.local`
+`Fan-TestKit-setup` 這個 open AP，phone 接上後 Android captive-portal
+detector 會自動跳 browser。成功後 success page 同時秀 `fan-testkit.local`
 跟 raw IP。細節見 [components/net_dashboard/provisioning.c](components/net_dashboard/provisioning.c) 跟 spec
 [docs/superpowers/specs/2026-04-22-softap-captive-portal-design.md](docs/superpowers/specs/2026-04-22-softap-captive-portal-design.md)。
 ```
@@ -1389,10 +1389,10 @@ flow (components/net_dashboard/captive_portal.c, dns_hijack.c,
 mdns_svc.c). Saves ~60 KB flash, removes the Espressif BLE Provisioning
 Android app requirement.
 
-User flow: on boot no creds → AP `ESP32-PWM-setup` + DNS hijack (every
+User flow: on boot no creds → AP `Fan-TestKit-setup` + DNS hijack (every
 query → 192.168.4.1) + catch-all HTTP 302 to /. Android captive-portal
 detector auto-opens browser on setup page. After submit + STA connect,
-success page shows `esp32-pwm.local` and raw DHCP IP. AP torn down 30 s
+success page shows `fan-testkit.local` and raw DHCP IP. AP torn down 30 s
 later. Factory reset path (`prov_clear_credentials` → `esp_wifi_restore`)
 unchanged for callers.
 

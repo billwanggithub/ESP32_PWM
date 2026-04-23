@@ -137,7 +137,7 @@ static void start_console(void)
 {
     esp_console_repl_t *repl = NULL;
     esp_console_repl_config_t repl_cfg = ESP_CONSOLE_REPL_CONFIG_DEFAULT();
-    repl_cfg.prompt = "esp32-pwm> ";
+    repl_cfg.prompt = "fan-testkit> ";
     repl_cfg.max_cmdline_length = 256;
 
     esp_console_dev_uart_config_t uart_cfg = ESP_CONSOLE_DEV_UART_CONFIG_DEFAULT();
@@ -149,7 +149,7 @@ static void start_console(void)
 
 void app_main(void)
 {
-    ESP_LOGI(TAG, "boot: ESP32-S3 PWM + RPM capture");
+    ESP_LOGI(TAG, "boot: Fan-TestKit (ESP32-S3 PWM + RPM capture)");
 
     esp_err_t nvs = nvs_flash_init();
     if (nvs == ESP_ERR_NVS_NO_FREE_PAGES || nvs == ESP_ERR_NVS_NEW_VERSION_FOUND) {

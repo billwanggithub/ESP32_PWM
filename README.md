@@ -1,4 +1,4 @@
-# ESP32-S3 PWM + RPM Capture
+# Fan-TestKit (ESP32-S3 PWM + RPM Capture)
 
 Firmware for the YD-ESP32-S3-COREBOARD V1.4 (ESP32-S3-WROOM-1, 16 MB flash,
 8 MB octal PSRAM). Generates a glitch-free PWM up to 1 MHz and captures
@@ -51,7 +51,7 @@ mechanism".
 3. **Build, flash**:
 
    ```bat
-   cd D:\github\ESP32_PWM
+   cd D:\github\Fan-TestKit-ESP32
    idf.py build
    idf.py -p COM24 flash monitor
    ```
@@ -95,7 +95,7 @@ to **USB-OTG**. Logs still appear on UART0 via USB1 regardless.
 | 20   | USB D+  (reserved by board)             |
 | 48   | Onboard WS2812 RGB status LED           |
 
-All configurable under `idf.py menuconfig` -> *ESP32 PWM App*.
+All configurable under `idf.py menuconfig` -> *Fan-TestKit App*.
 
 ## Interacting with the device
 
@@ -104,18 +104,18 @@ All configurable under `idf.py menuconfig` -> *ESP32 PWM App*.
   Baud rate is 115200.
 - **SoftAP captive portal** (first-time setup): on a board without
   stored Wi-Fi credentials, the device brings up an open AP named
-  `ESP32-PWM-setup`. Join it from your phone and open **any** URL in
+  `Fan-TestKit-setup`. Join it from your phone and open **any** URL in
   the browser — a DNS hijack redirects everything to the setup page.
   On some Android phones the captive-portal "Sign in to Wi-Fi network"
   notification fires automatically (stock Android 11+ works best);
   Samsung One UI often doesn't fire it and needs a manual browser tap.
   Enter your home SSID + password; on success the page shows both
-  `http://esp32-pwm.local/` and the assigned raw IP. Credentials
+  `http://fan-testkit.local/` and the assigned raw IP. Credentials
   persist in NVS so subsequent boots skip the AP and go straight to
   STA.
 - **Web dashboard** (Wi-Fi, after provisioning): browse to the raw IP
   shown on the success page (e.g. `http://192.168.1.47/`). The mDNS
-  name `http://esp32-pwm.local/` works in desktop browsers (Windows
+  name `http://fan-testkit.local/` works in desktop browsers (Windows
   with Bonjour, macOS, Linux with Avahi) but Chrome and most Android
   browsers don't resolve `.local` names — use the raw IP there. PWM
   freq/duty Apply, RPM params, live status (20 Hz WebSocket push),
@@ -144,7 +144,7 @@ reboot):
 4. **USB CDC** — send SLIP-framed op `0x20` with a 1-byte payload
    `0xA5`. The device replies with op `0x21` (ack) before restarting.
 
-After restart the device brings up the `ESP32-PWM-setup` open AP; join
+After restart the device brings up the `Fan-TestKit-setup` open AP; join
 it from your phone and the captive portal will pop up automatically.
 
 Manual fallback if the firmware is unreachable (wedged, bricked): on

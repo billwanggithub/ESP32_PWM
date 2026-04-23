@@ -1,4 +1,4 @@
-# First-Time Setup — YD-ESP32-S3 PWM 板子
+# First-Time Setup — Fan-TestKit (YD-ESP32-S3) 板子
 
 給剛拿到板子的新人看的 onboarding guide。第一次從 unbox 到在 browser
 上操作 PWM dashboard，全部步驟走一遍。目標是 5 ~ 10 分鐘搞定。
@@ -16,7 +16,7 @@
 整個流程就 3 個 step：
 
 ```
-1. 板子通電 → 會開一個 open AP "ESP32-PWM-setup"
+1. 板子通電 → 會開一個 open AP "Fan-TestKit-setup"
        │
        ▼
 2. 手機連上那個 AP → browser 打開任何 URL → 自動跳到 setup page
@@ -36,10 +36,10 @@
 2. 插上電腦或充電器之後，**onboard WS2812 LED (GPIO48) 會亮**，
    代表 firmware 跑起來了。
 3. 等 3 ~ 5 秒，板子會開一個 open (沒密碼) 的 SoftAP，SSID 是
-   **`ESP32-PWM-setup`**。
+   **`Fan-TestKit-setup`**。
 
 **怎麼確認 SoftAP 有開？** 手機 Wi-Fi 設定裡掃一下，應該看得到
-`ESP32-PWM-setup`。如果看不到：
+`Fan-TestKit-setup`。如果看不到：
 
 - 等再久一點 (某些板子 boot 比較慢，到 10 秒都算正常)。
 - 確認板子有通電 (LED 有亮)。
@@ -53,9 +53,9 @@
 
 ## Step 2 — 手機連 SoftAP、用 browser provision
 
-### 2.1 連上 `ESP32-PWM-setup`
+### 2.1 連上 `Fan-TestKit-setup`
 
-在手機 Wi-Fi 設定點 `ESP32-PWM-setup`。它是 open network，不用密碼，直接
+在手機 Wi-Fi 設定點 `Fan-TestKit-setup`。它是 open network，不用密碼，直接
 連。連上之後手機會顯示「此網路可能沒有網際網路連線」或類似警告 — **這正常**，
 因為 SoftAP 確實不通外網。**不要**選「切換網路」或「離開」，保持連著就對了。
 
@@ -83,7 +83,7 @@ DNS hijack 會把你 redirect 到 setup page。
 Setup page 長這樣：
 
 ```
-ESP32-PWM Setup
+Fan-TestKit Setup
 ───────────────────────────────────────
 Choose your home Wi-Fi and enter the
 password. The device will then switch
@@ -135,7 +135,7 @@ Reconnect your phone to your home Wi-Fi,
 then tap either link:
 
 ┌──────────────────────────────────┐
-│ http://esp32-pwm.local/          │
+│ http://fan-testkit.local/          │
 └──────────────────────────────────┘
 (try this first)
 
@@ -148,7 +148,7 @@ then tap either link:
 
 **兩個連結差在哪：**
 
-- **`http://esp32-pwm.local/`** — mDNS hostname。桌面 browser 在
+- **`http://fan-testkit.local/`** — mDNS hostname。桌面 browser 在
   Windows (要裝 Bonjour) / macOS / Linux (要 Avahi) 都 OK。但
   **Chrome on Android 不解 `.local`** (Chromium 長期 open issue)，所以
   手機上多半沒用。
@@ -157,7 +157,7 @@ then tap either link:
 
 ### 3.1 切換手機回 home Wi-Fi
 
-- **離開** `ESP32-PWM-setup` (device 自己會在大約 25 秒後關掉 AP，但
+- **離開** `Fan-TestKit-setup` (device 自己會在大約 25 秒後關掉 AP，但
   手機不會自動切換)。
 - 手機 Wi-Fi 設定切回你家的 Wi-Fi。
 - 點 success page 上的 raw IP 連結 (或直接在 browser 網址列打那個 IP)。
@@ -165,7 +165,7 @@ then tap either link:
 
 > **小提醒**：raw IP 記下來 (拍照、抄便條都行)。板子下次 boot 會
 > 用同一組 credentials 自動連 home Wi-Fi，但 DHCP 有可能配不同 IP。
-> 如果想要 stable address，就用 `esp32-pwm.local` (桌面 browser) 或
+> 如果想要 stable address，就用 `fan-testkit.local` (桌面 browser) 或
 > 去 router 設 DHCP reservation。
 
 
@@ -183,7 +183,7 @@ host 開著 port)。如果你有開 serial monitor，用支援「強制 DTR=1,
 RTS=1」的工具 (例如 串口調試助手) 或用 `idf.py -p COMn monitor --no-reset`。
 詳見 `CLAUDE.md` 的 "CH343 DTR/RTS auto-program trap" 那段。
 
-### 手機連 `ESP32-PWM-setup` 之後 browser 沒自動跳
+### 手機連 `Fan-TestKit-setup` 之後 browser 沒自動跳
 
 Samsung 跟某些電信 ROM 的已知限制 (上面 Step 2.2 有解釋)。
 **Workaround**：手動打開 browser，網址列隨便打一個 `http://` 開頭的
@@ -195,7 +195,7 @@ setup page。**不要打 `https://`** — TLS 沒辦法 hijack，會直接 error
 Device scan 失敗 (偶爾 driver glitch)。下拉選 `Other...`、手動打 SSID
 就好。
 
-### 連 success page 上的 `esp32-pwm.local` 連不到
+### 連 success page 上的 `fan-testkit.local` 連不到
 
 多半是你的 OS 沒有 mDNS resolver：
 

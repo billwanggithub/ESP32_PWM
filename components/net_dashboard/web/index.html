@@ -3,11 +3,11 @@
 <head>
   <meta charset="utf-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1" />
-  <title>ESP32-S3 PWM + RPM</title>
+  <title>Fan-TestKit Dashboard</title>
   <link rel="stylesheet" href="/app.css" />
 </head>
 <body>
-  <h1>ESP32-S3 PWM + RPM</h1>
+  <h1>Fan-TestKit Dashboard</h1>
 
   <section class="panel">
     <h2>PWM</h2>
@@ -45,8 +45,8 @@
   <section class="panel">
     <h2>Factory reset</h2>
     <p class="warn">
-      Clears stored Wi-Fi credentials and reboots. The device will advertise
-      <code>ESP32-PWM</code> over BLE for re-provisioning.
+      Clears stored Wi-Fi credentials and reboots. The device will open the
+      <code>Fan-TestKit-setup</code> SoftAP for re-provisioning.
     </p>
     <button id="factory_reset" class="danger">Factory reset</button>
     <span id="factory_reset_status" class="status"></span>
