@@ -12,9 +12,15 @@ dependencies:
     version: ">=6.0.0"
   espressif/esp_tinyusb:
     version: "~1.7.0"
-  # ESP-IDF v6.0 拔掉 built-in `wifi_provisioning`，改成 component manager 上的
-  # `espressif/network_provisioning`。API prefix 從 wifi_prov_* 改成
-  # network_prov_*，加上 NETWORK_PROV_NETWORK_TYPE_WIFI Kconfig 才會編出
-  # WIFI_CRED_* event。
-  espressif/network_provisioning:
-    version: "^1.2.0"
+  # cJSON — used by net_dashboard/ws_handler.c and captive_portal.c. In the
+  # previous BLE-provisioning setup it came in transitively via
+  # `espressif/network_provisioning`; now that we dropped BLE provisioning
+  # we must list it as a direct dependency so the component manager keeps
+  # it around after `NOTICE: Deleting unused components`.
+  espressif/cjson:
+    version: "^1.7.19"
+  # mdns was a built-in component in IDF v5.x but moved to the component
+  # manager in v6.0. Used by components/net_dashboard/mdns_svc.c to
+  # advertise `esp32-pwm.local` once STA is up.
+  espressif/mdns:
+    version: "^1.8.0"

@@ -5,6 +5,54 @@ Branch: `chore/migrate-idf-v6.0` (off `feat/pwm-1hz-floor`)
 Working dir: `D:\github\ESP32_PWM`
 IDF: `C:\esp\v6.0\esp-idf` (was `C:\Espressif\frameworks\esp-idf-v5.5.1`)
 
+## 2026-04-22 — provisioning migration: BLE → SoftAP captive portal
+
+Dropped `espressif/network_provisioning` + BLE (NimBLE) + PoP-based
+protocomm SECURITY_1. Replaced with in-project SoftAP + captive portal
+flow (components/net_dashboard/captive_portal.c, dns_hijack.c,
+mdns_svc.c). Saves ~60 KB flash, removes the Espressif BLE Provisioning
+Android app requirement.
+
+User flow: on boot no creds → AP `ESP32-PWM-setup` + DNS hijack (every
+query → 192.168.4.1) + catch-all HTTP 200 with meta-refresh + RFC 8908
+`Link: rel="captive-portal"` header. After submit + STA connect, success
+page shows `esp32-pwm.local` and raw DHCP IP. AP torn down ~25 s later.
+Factory reset path (`prov_clear_credentials` → `esp_wifi_restore`)
+unchanged for callers.
+
+Hardware validation on 2026-04-22 (Samsung phone, One UI):
+
+- PC (Windows with Bonjour): `http://esp32-pwm.local/` resolves, dashboard
+  loads.
+- Samsung phone, STA side: raw-IP link works; `.local` mDNS does NOT
+  resolve (Chrome on Android doesn't do mDNS — long-standing Chromium
+  limitation). The success page intentionally shows the raw IP for
+  exactly this fallback.
+- Samsung phone, captive-portal auto-popup: **does not fire on this
+  phone**. Tried 302, 200 + HTML body, RFC 8908 Link header, POST/HEAD
+  catch-all, and a port-443 accept+close helper — none made Samsung
+  raise the "Sign in to Wi-Fi network" UI. The phone issues exactly
+  one malformed HTTP probe (~15 s after DHCP) and gives up silently.
+  Suspected cause: Samsung OneUI / carrier policy disables HTTP probe
+  fallback and uses HTTPS-only detection.
+- Samsung phone, manual flow: works — join AP, open browser, navigate
+  to anything (DNS hijack redirects to `192.168.4.1`), setup page loads,
+  submit credentials, success page renders, done.
+
+Open items:
+
+- iOS not validated. Protocol identical, and iOS captive-portal detection
+  is historically more reliable than Android's; likely works out of the
+  box, but confirm before shipping to iOS users.
+- STA failure doesn't fall back to AP at runtime — user must factory-reset
+  to re-enter setup. Acceptable per spec (Q4 in brainstorming).
+- Auto-popup on Samsung is **not fixable in firmware**. If we want a
+  guaranteed auto-open experience, the options are: (a) ship a
+  companion Android app that uses `NsdManager` to find the device after
+  provisioning, or (b) print a QR code on the device label that points
+  to the setup URL so the user scans instead of relying on captive
+  detection. Both are out of scope for this branch.
+
 ## 2026-04-22 晚 — factory reset / re-provisioning 四路打通 (commit `7ef24d6`)
 
 之前沒有 runtime 路徑可以清 Wi-Fi credentials，要重新 provision 一定得

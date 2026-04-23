@@ -1,0 +1,107 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>ESP32-PWM Setup</title>
+<style>
+body { font-family: sans-serif; max-width: 420px; margin: 1em auto; padding: 0 1em; }
+h1 { font-size: 1.3em; }
+label { display: block; margin: 1em 0 0.3em; }
+select, input, button { font-size: 1em; width: 100%; padding: 0.6em; box-sizing: border-box; }
+button { margin-top: 1em; background: #205080; color: #fff; border: none; border-radius: 4px; }
+button:disabled { background: #888; }
+#err { color: #a00; margin-top: 0.8em; white-space: pre-wrap; }
+#manual { display: none; }
+.hint { color: #666; font-size: 0.9em; }
+</style>
+</head>
+<body>
+<h1>ESP32-PWM Setup</h1>
+<p class="hint">Choose your home Wi-Fi and enter the password. The device will then switch off this setup network and join your Wi-Fi.</p>
+
+<label for="ssid">Wi-Fi network</label>
+<select id="ssid">
+  <option value="">Scanning...</option>
+</select>
+
+<div id="manual">
+  <label for="ssid_manual">SSID</label>
+  <input id="ssid_manual" type="text" autocapitalize="off" autocorrect="off" spellcheck="false">
+</div>
+
+<label for="pw">Password</label>
+<input id="pw" type="password">
+
+<button id="go">Connect</button>
+<div id="err"></div>
+
+<script>
+const ssidSel = document.getElementById('ssid');
+const ssidMan = document.getElementById('ssid_manual');
+const manualBox = document.getElementById('manual');
+const pw = document.getElementById('pw');
+const err = document.getElementById('err');
+const go = document.getElementById('go');
+
+async function scan() {
+  try {
+    const r = await fetch('/scan');
+    const list = await r.json();
+    ssidSel.innerHTML = '';
+    list.forEach(n => {
+      const o = document.createElement('option');
+      o.value = n.ssid;
+      o.textContent = `${n.ssid}  (${n.rssi} dBm)`;
+      ssidSel.appendChild(o);
+    });
+    const o = document.createElement('option');
+    o.value = '__manual__';
+    o.textContent = 'Other...';
+    ssidSel.appendChild(o);
+  } catch (e) {
+    ssidSel.innerHTML = '';
+    const o = document.createElement('option');
+    o.value = '__manual__';
+    o.textContent = 'Scan failed — enter SSID manually';
+    ssidSel.appendChild(o);
+    ssidSel.value = '__manual__';
+    manualBox.style.display = 'block';
+  }
+}
+
+ssidSel.addEventListener('change', () => {
+  manualBox.style.display = ssidSel.value === '__manual__' ? 'block' : 'none';
+});
+
+go.addEventListener('click', async () => {
+  err.textContent = '';
+  go.disabled = true;
+  go.textContent = 'Connecting... (up to 20 s)';
+  const ssid = ssidSel.value === '__manual__' ? ssidMan.value : ssidSel.value;
+  if (!ssid) { err.textContent = 'Pick or type an SSID.'; go.disabled = false; go.textContent = 'Connect'; return; }
+  try {
+    const r = await fetch('/save_wifi', {
+      method: 'POST',
+      headers: {'Content-Type': 'application/json'},
+      body: JSON.stringify({ssid, password: pw.value}),
+    });
+    if (r.ok) {
+      window.location = '/success';
+    } else {
+      const j = await r.json().catch(() => ({error: 'unknown'}));
+      err.textContent = 'Failed: ' + j.error;
+      go.disabled = false;
+      go.textContent = 'Connect';
+    }
+  } catch (e) {
+    err.textContent = 'Request failed: ' + e;
+    go.disabled = false;
+    go.textContent = 'Connect';
+  }
+});
+
+scan();
+</script>
+</body>
+</html>
