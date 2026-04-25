@@ -57,6 +57,15 @@
       </div>
       <p class="settings-hint" data-i18n="step_hint">Step sizes apply immediately to the slider step on the Duty / Frequency panels.</p>
     </div>
+
+    <div class="settings-section">
+      <h3 data-i18n="gpio_output">GPIO output</h3>
+      <div class="settings-grid">
+        <label for="pulse-width-ms" data-i18n="pulse_width_label">Pulse width (ms)</label>
+        <input id="pulse-width-ms" type="number" min="1" max="10000" value="100" />
+      </div>
+      <button id="apply_pulse_width" class="btn-primary" data-i18n="apply_pulse_width">Apply</button>
+    </div>
   </details>
 
   <!-- ============== RPM panel ============== -->
@@ -161,6 +170,33 @@
     </details>
   </section>
 
+  <!-- ============== Power switch panel ============== -->
+  <section class="panel power-panel">
+    <h2 data-i18n="power_switch">Power Switch</h2>
+    <div class="row">
+      <span class="label" data-i18n="power_state">State</span>
+      <button id="power_btn" class="big-toggle" type="button" data-on="0">
+        <span class="ico">⏻</span>
+        <span class="txt" data-i18n="power_off">OFF</span>
+      </button>
+    </div>
+  </section>
+
+  <!-- ============== GPIO panel ============== -->
+  <section class="panel gpio-panel">
+    <h2 data-i18n="gpio">GPIO</h2>
+
+    <div class="gpio-group">
+      <h3 data-i18n="group_a">Group A</h3>
+      <div class="gpio-rows" id="gpio-group-a"></div>
+    </div>
+
+    <div class="gpio-group">
+      <h3 data-i18n="group_b">Group B</h3>
+      <div class="gpio-rows" id="gpio-group-b"></div>
+    </div>
+  </section>
+
   <!-- ============== OTA panel ============== -->
   <section class="panel">
     <h2 data-i18n="firmware_update">Firmware Update</h2>
@@ -192,6 +228,9 @@
       <li><span data-i18n="help_pin_trigger">Change-trigger output:</span> GPIO<span data-pin="trigger">?</span></li>
       <li><span data-i18n="help_pin_rpm">RPM capture input:</span> GPIO<span data-pin="rpm">?</span></li>
       <li><span data-i18n="help_pin_led">Status LED (WS2812):</span> GPIO<span data-pin="status_led">?</span></li>
+      <li><span data-i18n="help_pin_power">Power-switch:</span> GPIO<span data-pin="power_switch">?</span></li>
+      <li><span data-i18n="help_pin_group_a">GPIO Group A:</span> <span data-pin-list="group_a">?</span></li>
+      <li><span data-i18n="help_pin_group_b">GPIO Group B:</span> <span data-pin-list="group_b">?</span></li>
     </ul>
 
     <h3 data-i18n="help_pwm_h">Duty / Frequency</h3>
@@ -221,6 +260,9 @@
          <code>0x20</code> with magic byte <code>0xA5</code>. All four
          entry points land on <code>net_dashboard_factory_reset()</code>.</p>
     </details>
+
+    <h3 data-i18n="help_gpio_h">GPIO &amp; Power</h3>
+    <p data-i18n="help_gpio_p">Group A defaults to input (pull-down) and Group B defaults to output (low). Each pin can be flipped between input and output at runtime; outputs support level toggle and a one-shot pulse of configurable width. Power switch toggles a GPIO whose polarity (active-high / active-low) is set at build time via Kconfig.</p>
 
     <h3 data-i18n="help_wifi_h">Wi-Fi setup fallback</h3>
     <p data-i18n="help_wifi_p">If credentials are missing or wrong, the device opens an open SoftAP
