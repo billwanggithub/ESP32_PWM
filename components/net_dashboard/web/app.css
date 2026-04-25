@@ -255,7 +255,7 @@ details[open] > summary::before { transform: rotate(90deg); }
 
 .rpm-header .live-toggle input { accent-color: var(--accent); }
 
-/* RPM 設定 popover-style details */
+/* RPM Settings popover-style details */
 .rpm-settings {
   position: relative;
   display: inline-block;
@@ -468,4 +468,60 @@ button.danger[disabled] {
   margin-left: 0.8em;
   font-size: 0.9em;
   color: var(--muted);
+}
+
+/* ============== Help panel ============== */
+
+/* .help-panel inherits .panel chrome (border, radius, padding). The rules
+   below only add help-specific sizing for summary, headings, lists, code,
+   and the nested Developer notes. */
+
+.help-panel > summary {
+  /* Match h2 weight inside other panels — Help is a sibling section. */
+  font-size: 0.78em;
+  font-weight: 600;
+  color: var(--muted);
+  text-transform: uppercase;
+  letter-spacing: 0.08em;
+}
+
+.help-panel h3 {
+  font-size: 0.92em;
+  font-weight: 600;
+  margin: 1em 0 0.3em;
+  color: inherit;
+}
+
+.help-panel h3:first-of-type { margin-top: 0.7em; }
+
+.help-panel p,
+.help-panel ul {
+  margin: 0.3em 0;
+  font-size: 0.92em;
+}
+
+.help-panel ul {
+  padding-left: 1.4em;
+}
+
+.help-panel li + li { margin-top: 0.15em; }
+
+.help-panel code {
+  font-size: 0.92em;
+  background: var(--bg-soft);
+  padding: 0.05em 0.3em;
+  border-radius: 3px;
+}
+
+.help-panel .dev-notes {
+  margin-top: 0.5em;
+  font-size: 0.88em;
+}
+
+.help-panel .dev-notes > summary {
+  font-size: inherit;
+  font-weight: 500;
+  color: var(--muted);
+  text-transform: none;
+  letter-spacing: normal;
 }
