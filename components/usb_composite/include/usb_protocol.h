@@ -96,6 +96,28 @@ typedef struct __attribute__((packed)) {
 #define USB_CDC_OP_POWER             0x33   // payload: on
 #define USB_CDC_OP_PULSE_WIDTH_SET   0x34   // payload: width_lo, width_hi
 
+// ---- PSU power supply (HID) ------------------------------------------------
+
+#define USB_HID_REPORT_PSU            0x05   // OUT, 8 B (op, payload[5..7])
+
+// op codes inside report 0x05 byte 0
+#define USB_HID_PSU_OP_SET_VOLTAGE    0x10   // bytes 1..4 = float LE
+#define USB_HID_PSU_OP_SET_CURRENT    0x11   // bytes 1..4 = float LE
+#define USB_HID_PSU_OP_SET_OUTPUT     0x12   // byte  1    = 0|1
+#define USB_HID_PSU_OP_SET_SLAVE      0x13   // byte  1 = addr, byte 5 = magic 0xA5
+
+#define USB_HID_PSU_SLAVE_MAGIC       0xA5
+
+// ---- PSU power supply (CDC SLIP) ------------------------------------------
+
+#define USB_CDC_OP_PSU_SET_VOLTAGE    0x40   // float LE (4 B)
+#define USB_CDC_OP_PSU_SET_CURRENT    0x41   // float LE (4 B)
+#define USB_CDC_OP_PSU_SET_OUTPUT     0x42   // u8 (0|1)
+#define USB_CDC_OP_PSU_SET_SLAVE      0x43   // u8 addr, u8 magic 0xA5
+#define USB_CDC_OP_PSU_TELEMETRY      0x44   // D→H @ 5 Hz: 4×float + u8 flags = 18 B (op + 17 payload)
+
+#define USB_CDC_PSU_SLAVE_MAGIC       0xA5
+
 #ifdef __cplusplus
 }
 #endif

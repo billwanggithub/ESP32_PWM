@@ -103,6 +103,44 @@ void tud_hid_set_report_cb(uint8_t instance, uint8_t report_id,
             break;
         }
     } break;
+    case USB_HID_REPORT_PSU: {
+        if (bufsize < 1) return;
+        uint8_t op = buffer[0];
+        ctrl_cmd_t cmd = {0};
+        bool ok = false;
+        switch (op) {
+        case USB_HID_PSU_OP_SET_VOLTAGE:
+            if (bufsize < 5) break;
+            memcpy(&cmd.psu_set_voltage.v, &buffer[1], 4);
+            cmd.kind = CTRL_CMD_PSU_SET_VOLTAGE;
+            ok = true;
+            break;
+        case USB_HID_PSU_OP_SET_CURRENT:
+            if (bufsize < 5) break;
+            memcpy(&cmd.psu_set_current.i, &buffer[1], 4);
+            cmd.kind = CTRL_CMD_PSU_SET_CURRENT;
+            ok = true;
+            break;
+        case USB_HID_PSU_OP_SET_OUTPUT:
+            if (bufsize < 2) break;
+            cmd.kind = CTRL_CMD_PSU_SET_OUTPUT;
+            cmd.psu_set_output.on = buffer[1] ? 1 : 0;
+            ok = true;
+            break;
+        case USB_HID_PSU_OP_SET_SLAVE:
+            if (bufsize < 6) break;
+            if (buffer[5] != USB_HID_PSU_SLAVE_MAGIC) break;
+            if (buffer[1] < 1 || buffer[1] > 247) break;
+            cmd.kind = CTRL_CMD_PSU_SET_SLAVE;
+            cmd.psu_set_slave.addr = buffer[1];
+            ok = true;
+            break;
+        default:
+            ESP_LOGW(TAG, "unknown psu op 0x%02x", op);
+            break;
+        }
+        if (ok) control_task_post(&cmd, 0);
+    } break;
     default:
         ESP_LOGW(TAG, "unknown OUT report id 0x%02x", report_id);
         break;
