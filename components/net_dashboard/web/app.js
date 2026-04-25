@@ -31,17 +31,18 @@
     loadDeviceInfo();
   }
 
-  const lastSent = { freq: 1000, duty: 0 };
+  // Single source of truth for "what's the other axis?" is each panel's
+  // current value (kept in sync with device telemetry via setFromDevice).
+  // No browser-side cache — eliminates the staleness window where a stale
+  // freq=0 would poison a duty-only commit before the user ever changed freq.
   function sendPwm(freq, duty) {
     if (ws.readyState !== WebSocket.OPEN) return;
-    lastSent.freq = freq;
-    lastSent.duty = duty;
     ws.send(JSON.stringify({ type: 'set_pwm', freq, duty }));
   }
 
-  // mirrors components/pwm_gen/pwm_gen.c band table
+  // mirrors components/pwm_gen/pwm_gen.c band table (v6.0: LO is 625 kHz)
   function dutyResolutionBits(freqHz) {
-    const RES_HI = 10_000_000, RES_LO = 320_000;
+    const RES_HI = 10_000_000, RES_LO = 625_000;
     const res = freqHz >= 153 ? RES_HI : RES_LO;
     const period = Math.max(1, Math.floor(res / freqHz));
     return Math.max(0, Math.floor(Math.log2(period)));
@@ -297,7 +298,16 @@
   });
 
   // ---------- panel instances ----------
-  const dutyPanel = makePanel({
+  // Forward-declared so each panel's onCommit can read the other panel's
+  // current value at commit time (closure binds the let at call time, not at
+  // declaration time). This keeps "the other axis" in lockstep with whatever
+  // the device most recently reported via setFromDevice.
+  let dutyPanel;
+  let freqPanel;
+
+  const freqResbits = document.getElementById('freq-resbits');
+
+  dutyPanel = makePanel({
     kind: 'duty',
     axis: 'duty',
     range: { min: 0, max: 100 },
@@ -308,15 +318,14 @@
     sliderToValue: (s) => s,
     valueToSlider: (v) => Math.round(v),
     formatReadout: (v) => v.toFixed(1),
-    onCommit: (v) => sendPwm(lastSent.freq, v),
+    onCommit: (v) => sendPwm(freqPanel.getValue(), v),
   });
 
-  const freqResbits = document.getElementById('freq-resbits');
-  const freqPanel = makePanel({
+  freqPanel = makePanel({
     kind: 'freq',
     axis: 'freq',
     range: { min: 10, max: 1_000_000 },
-    defaultValue: 1000,
+    defaultValue: 10000,
     presetDefaults: [25, 100, 1000, 5000, 25000, 100000],
     presetStorageKey: 'fan-testkit:freq-presets',
     stepStorageKey: 'fan-testkit:freq-step',
@@ -327,7 +336,7 @@
     },
     valueToSlider: (v) => clamp(Math.round(Math.log10(Math.max(1, v)) * 100), 100, 600),
     formatReadout: (v) => String(Math.round(v)),
-    onCommit: (v) => sendPwm(v, lastSent.duty),
+    onCommit: (v) => sendPwm(v, dutyPanel.getValue()),
     onValueChanged: (v) => {
       freqResbits.textContent = String(dutyResolutionBits(v));
     },
@@ -338,13 +347,12 @@
     try {
       const msg = JSON.parse(ev.data);
       if (msg.type === 'status') {
+        // setFromDevice updates each panel's `current` (read by getValue()),
+        // so the next onCommit on the *other* axis automatically picks up
+        // the latest device value. No separate cache to keep coherent.
         if (typeof msg.freq === 'number') freqPanel.setFromDevice(msg.freq);
         if (typeof msg.duty === 'number') dutyPanel.setFromDevice(msg.duty);
         if (typeof msg.rpm === 'number') setRpmFromDevice(msg.rpm);
-        // Track whatever the device just told us so the next single-axis
-        // commit sends the correct other-axis value.
-        if (typeof msg.freq === 'number') lastSent.freq = msg.freq;
-        if (typeof msg.duty === 'number') lastSent.duty = msg.duty;
       } else if (msg.type === 'ack' && msg.op === 'factory_reset') {
         const fs = document.getElementById('factory_reset_status');
         if (fs) fs.textContent = 'Device acknowledged — rebooting…';

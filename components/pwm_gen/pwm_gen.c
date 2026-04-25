@@ -109,8 +109,8 @@ esp_err_t pwm_gen_init(const pwm_gen_config_t *cfg)
     s_pwm.pwm_gpio     = cfg->pwm_gpio;
     s_pwm.trigger_gpio = cfg->trigger_gpio;
 
-    // Start at a safe known state: 1 kHz, 0% duty. Falls into the HI band.
-    const uint32_t init_freq = 1000;
+    // Start at a safe known state: 10 kHz, 0% duty. Falls into the HI band.
+    const uint32_t init_freq = 10000;
     const pwm_band_t *band = pick_band(init_freq);
     s_pwm.resolution_hz = band->resolution_hz;
     s_pwm.period_ticks  = freq_to_period_ticks(band->resolution_hz, init_freq);

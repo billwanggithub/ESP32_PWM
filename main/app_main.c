@@ -176,6 +176,19 @@ void app_main(void)
     ESP_ERROR_CHECK(ota_core_init());
     ESP_ERROR_CHECK(control_task_start());
 
+    // Drive the default setpoint through the same path every later command
+    // uses (pwm_gen_set → publish_pwm). This makes the published atomics, the
+    // hardware, and downstream telemetry/HID status frames all reflect the
+    // same boot default — so a duty-only command from the dashboard before any
+    // freq change carries a real freq, not zero.
+    {
+        ctrl_cmd_t boot_pwm = {
+            .kind    = CTRL_CMD_SET_PWM,
+            .set_pwm = { .freq_hz = 10000u, .duty_pct = 0.0f },
+        };
+        control_task_post(&boot_pwm, pdMS_TO_TICKS(100));
+    }
+
     // USB composite on the native USB2 port (GPIO19/20). Requires the
     // board's USB-OTG 0 Ω jumper to be bridged.
     esp_err_t usb_err = usb_composite_start();
