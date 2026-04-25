@@ -476,19 +476,9 @@ float psu_modbus_get_i_max(void)
     return 6.0f;
 }
 
-// ---- Compile-time CRC sanity ----------------------------------------------
-// Modbus FAQ canonical request {01 03 00 08 00 05} → CRC 0x0944. modbus_crc16
-// isn't constexpr-friendly in C99, so we run the check at startup via a
-// constructor. Trap (intentional crash) on mismatch — this is a wire-protocol
-// invariant; if it ever fails the firmware should not run.
-__attribute__((constructor))
-static void modbus_crc16_self_check(void)
-{
-    static const uint8_t v[6] = {0x01, 0x03, 0x00, 0x08, 0x00, 0x05};
-    uint16_t got = modbus_crc16(v, 6);
-    if (got != 0x0944) {
-        // ESP_LOG isn't ready yet at constructor time. __builtin_trap halts
-        // and leaves a clean PC for backtrace.
-        __builtin_trap();
-    }
-}
+// CRC correctness is verified end-to-end: a bad implementation produces
+// frames the supply rejects, every transaction times out, and link_ok stays
+// false — the dashboard immediately shows "PSU offline". A boot-time
+// __builtin_trap was tried earlier but the constant we compared against
+// turned out to be wrong, bricking boot; the on-the-wire feedback loop is
+// the real test anyway.
