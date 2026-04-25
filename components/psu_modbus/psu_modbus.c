@@ -4,8 +4,21 @@
 #include <string.h>
 
 #include "esp_log.h"
+#include "driver/uart.h"
+#include "nvs.h"
+#include "nvs_flash.h"
+#include "sdkconfig.h"
 
 static const char *TAG = "psu_modbus";
+
+#define PSU_UART_PORT     UART_NUM_1
+#define PSU_RX_BUF_SIZE   256
+#define PSU_TX_BUF_SIZE   256
+
+#define NVS_NAMESPACE     "psu_modbus"
+#define NVS_KEY_SLAVE     "slave_addr"
+
+static _Atomic uint8_t s_slave_addr;
 
 // ---- Modbus-RTU CRC-16 (poly 0xA001, init 0xFFFF) -------------------------
 static uint16_t modbus_crc16(const uint8_t *buf, size_t len)
@@ -63,15 +76,82 @@ static bool verify_crc(const uint8_t *buf, size_t len)
     return want == got;
 }
 
-// ---- Public API stubs (filled in Tasks 5-8) -------------------------------
+// ---- NVS helpers -----------------------------------------------------------
 
-esp_err_t psu_modbus_init(void)            { ESP_LOGI(TAG, "init (stub)");  return ESP_OK; }
+static void load_slave_addr_from_nvs(void)
+{
+    nvs_handle_t h;
+    if (nvs_open(NVS_NAMESPACE, NVS_READONLY, &h) != ESP_OK) {
+        atomic_store_explicit(&s_slave_addr,
+                              (uint8_t)CONFIG_APP_PSU_SLAVE_DEFAULT,
+                              memory_order_relaxed);
+        return;
+    }
+    uint8_t v = (uint8_t)CONFIG_APP_PSU_SLAVE_DEFAULT;
+    (void)nvs_get_u8(h, NVS_KEY_SLAVE, &v);
+    if (v < 1 || v > 247) v = (uint8_t)CONFIG_APP_PSU_SLAVE_DEFAULT;
+    atomic_store_explicit(&s_slave_addr, v, memory_order_relaxed);
+    nvs_close(h);
+    ESP_LOGI(TAG, "slave addr from NVS: %u", v);
+}
+
+static void save_slave_addr_to_nvs(uint8_t v)
+{
+    nvs_handle_t h;
+    if (nvs_open(NVS_NAMESPACE, NVS_READWRITE, &h) != ESP_OK) return;
+    nvs_set_u8(h, NVS_KEY_SLAVE, v);
+    nvs_commit(h);
+    nvs_close(h);
+}
+
+// ---- Public API (Tasks 5-8) -----------------------------------------------
+
+esp_err_t psu_modbus_init(void)
+{
+    load_slave_addr_from_nvs();
+
+    const uart_config_t cfg = {
+        .baud_rate  = CONFIG_APP_PSU_UART_BAUD,
+        .data_bits  = UART_DATA_8_BITS,
+        .parity     = UART_PARITY_DISABLE,
+        .stop_bits  = UART_STOP_BITS_1,
+        .flow_ctrl  = UART_HW_FLOWCTRL_DISABLE,
+        .source_clk = UART_SCLK_DEFAULT,
+    };
+    esp_err_t e = uart_driver_install(PSU_UART_PORT, PSU_RX_BUF_SIZE,
+                                      PSU_TX_BUF_SIZE, 0, NULL, 0);
+    if (e != ESP_OK) { ESP_LOGE(TAG, "driver_install: %s", esp_err_to_name(e)); return e; }
+    e = uart_param_config(PSU_UART_PORT, &cfg);
+    if (e != ESP_OK) { ESP_LOGE(TAG, "param_config: %s", esp_err_to_name(e));  return e; }
+    e = uart_set_pin(PSU_UART_PORT,
+                     CONFIG_APP_PSU_UART_TX_GPIO,
+                     CONFIG_APP_PSU_UART_RX_GPIO,
+                     UART_PIN_NO_CHANGE, UART_PIN_NO_CHANGE);
+    if (e != ESP_OK) { ESP_LOGE(TAG, "set_pin: %s", esp_err_to_name(e));       return e; }
+
+    ESP_LOGI(TAG, "UART1 ready: tx=%d rx=%d baud=%d slave=%u",
+             CONFIG_APP_PSU_UART_TX_GPIO, CONFIG_APP_PSU_UART_RX_GPIO,
+             CONFIG_APP_PSU_UART_BAUD,
+             atomic_load_explicit(&s_slave_addr, memory_order_relaxed));
+    return ESP_OK;
+}
 esp_err_t psu_modbus_start(void)           { ESP_LOGI(TAG, "start (stub)"); return ESP_OK; }
 esp_err_t psu_modbus_set_voltage(float v)  { (void)v; return ESP_OK; }
 esp_err_t psu_modbus_set_current(float i)  { (void)i; return ESP_OK; }
 esp_err_t psu_modbus_set_output(bool on)   { (void)on; return ESP_OK; }
-uint8_t   psu_modbus_get_slave_addr(void)  { return 1; }
-esp_err_t psu_modbus_set_slave_addr(uint8_t a) { (void)a; return ESP_OK; }
+uint8_t psu_modbus_get_slave_addr(void)
+{
+    return atomic_load_explicit(&s_slave_addr, memory_order_relaxed);
+}
+
+esp_err_t psu_modbus_set_slave_addr(uint8_t addr)
+{
+    if (addr < 1 || addr > 247) return ESP_ERR_INVALID_ARG;
+    atomic_store_explicit(&s_slave_addr, addr, memory_order_relaxed);
+    save_slave_addr_to_nvs(addr);
+    ESP_LOGI(TAG, "slave addr set to %u (NVS)", addr);
+    return ESP_OK;
+}
 
 void psu_modbus_get_telemetry(psu_modbus_telemetry_t *out)
 {
