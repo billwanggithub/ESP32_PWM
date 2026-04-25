@@ -182,6 +182,52 @@
     </div>
   </section>
 
+
+  <!-- ============== Power Supply panel ============== -->
+  <details id="psu-panel" class="panel psu-panel" open>
+    <summary>
+      <span data-i18n="psu_title">Power Supply</span>
+      <span class="psu-meta">
+        <span id="psu-model">—</span>
+        <span> · slave </span>
+        <span id="psu-slave">—</span>
+      </span>
+      <span id="psu-link" class="psu-link" data-state="down" title="link"></span>
+    </summary>
+    <div class="psu-body">
+      <div class="psu-row">
+        <label data-i18n="psu_v_set">V set</label>
+        <input type="range"  id="psu-v-slider" min="0" max="60"   step="0.01"  value="0" />
+        <input type="number" id="psu-v-input"  min="0" max="60"   step="0.01"  value="0" />
+        <span class="psu-unit">V</span>
+        <span class="psu-meas">
+          <span data-i18n="psu_measured">measured</span>
+          <span id="psu-v-out">0.00</span> V
+        </span>
+      </div>
+      <div class="psu-row">
+        <label data-i18n="psu_i_set">I set</label>
+        <input type="range"  id="psu-i-slider" min="0" max="6"    step="0.001" value="0" />
+        <input type="number" id="psu-i-input"  min="0" max="6"    step="0.001" value="0" />
+        <span class="psu-unit">A</span>
+        <span class="psu-meas">
+          <span data-i18n="psu_measured">measured</span>
+          <span id="psu-i-out">0.000</span> A
+        </span>
+      </div>
+      <div class="psu-row">
+        <label data-i18n="psu_output">Output</label>
+        <button id="psu-out-off" class="psu-btn" data-i18n="psu_off">OFF</button>
+        <button id="psu-out-on"  class="psu-btn" data-i18n="psu_on">ON</button>
+      </div>
+      <div class="psu-row psu-settings">
+        <label data-i18n="psu_slave_lbl">Slave addr</label>
+        <input type="number" id="psu-slave-input" min="1" max="247" value="1" />
+        <button id="psu-slave-save" data-i18n="psu_save">Save</button>
+      </div>
+    </div>
+  </details>
+
   <!-- ============== GPIO panel ============== -->
   <details class="panel gpio-panel" id="gpio">
     <summary data-i18n="gpio">GPIO</summary>
