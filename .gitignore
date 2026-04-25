@@ -23,3 +23,6 @@ secure_boot_signing_key.pem
 Thumbs.db
 # Superpowers skill runtime cache (brainstorm sessions, etc.)
 .superpowers/
+
+# Git worktrees (isolated branches, never tracked)
+.worktrees/
