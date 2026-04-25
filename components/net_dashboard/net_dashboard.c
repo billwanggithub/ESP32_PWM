@@ -72,6 +72,29 @@ static esp_err_t device_info_get(httpd_req_t *req)
     cJSON_AddNumberToObject(pins, "trigger",    CONFIG_APP_PWM_TRIGGER_GPIO);
     cJSON_AddNumberToObject(pins, "rpm",        CONFIG_APP_RPM_INPUT_GPIO);
     cJSON_AddNumberToObject(pins, "status_led", CONFIG_APP_STATUS_LED_GPIO);
+    cJSON_AddNumberToObject(pins, "power_switch", CONFIG_APP_POWER_SWITCH_GPIO);
+    cJSON *gpio_a = cJSON_AddArrayToObject(pins, "group_a");
+    cJSON *gpio_b = cJSON_AddArrayToObject(pins, "group_b");
+    if (gpio_a) {
+        cJSON_AddItemToArray(gpio_a, cJSON_CreateNumber(CONFIG_APP_GPIO_GROUP_A_PIN_0));
+        cJSON_AddItemToArray(gpio_a, cJSON_CreateNumber(CONFIG_APP_GPIO_GROUP_A_PIN_1));
+        cJSON_AddItemToArray(gpio_a, cJSON_CreateNumber(CONFIG_APP_GPIO_GROUP_A_PIN_2));
+        cJSON_AddItemToArray(gpio_a, cJSON_CreateNumber(CONFIG_APP_GPIO_GROUP_A_PIN_3));
+        cJSON_AddItemToArray(gpio_a, cJSON_CreateNumber(CONFIG_APP_GPIO_GROUP_A_PIN_4));
+        cJSON_AddItemToArray(gpio_a, cJSON_CreateNumber(CONFIG_APP_GPIO_GROUP_A_PIN_5));
+        cJSON_AddItemToArray(gpio_a, cJSON_CreateNumber(CONFIG_APP_GPIO_GROUP_A_PIN_6));
+        cJSON_AddItemToArray(gpio_a, cJSON_CreateNumber(CONFIG_APP_GPIO_GROUP_A_PIN_7));
+    }
+    if (gpio_b) {
+        cJSON_AddItemToArray(gpio_b, cJSON_CreateNumber(CONFIG_APP_GPIO_GROUP_B_PIN_0));
+        cJSON_AddItemToArray(gpio_b, cJSON_CreateNumber(CONFIG_APP_GPIO_GROUP_B_PIN_1));
+        cJSON_AddItemToArray(gpio_b, cJSON_CreateNumber(CONFIG_APP_GPIO_GROUP_B_PIN_2));
+        cJSON_AddItemToArray(gpio_b, cJSON_CreateNumber(CONFIG_APP_GPIO_GROUP_B_PIN_3));
+        cJSON_AddItemToArray(gpio_b, cJSON_CreateNumber(CONFIG_APP_GPIO_GROUP_B_PIN_4));
+        cJSON_AddItemToArray(gpio_b, cJSON_CreateNumber(CONFIG_APP_GPIO_GROUP_B_PIN_5));
+        cJSON_AddItemToArray(gpio_b, cJSON_CreateNumber(CONFIG_APP_GPIO_GROUP_B_PIN_6));
+        cJSON_AddItemToArray(gpio_b, cJSON_CreateNumber(CONFIG_APP_GPIO_GROUP_B_PIN_7));
+    }
 
     cJSON_AddNumberToObject(defaults, "pole_count",     CONFIG_APP_DEFAULT_POLE_COUNT);
     cJSON_AddNumberToObject(defaults, "mavg_count",     CONFIG_APP_DEFAULT_MAVG_COUNT);
