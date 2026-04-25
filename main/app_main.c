@@ -12,6 +12,7 @@
 #include "freertos/task.h"
 
 #include "sdkconfig.h"
+#include "gpio_io.h"
 #include "pwm_gen.h"
 #include "rpm_cap.h"
 #include "app_api.h"
@@ -172,6 +173,8 @@ void app_main(void)
         .rpm_timeout_us   = CONFIG_APP_DEFAULT_RPM_TIMEOUT_US,
     };
     ESP_ERROR_CHECK(rpm_cap_init(&rpm_cfg));
+
+    ESP_ERROR_CHECK(gpio_io_init());
 
     ESP_ERROR_CHECK(ota_core_init());
     ESP_ERROR_CHECK(control_task_start());
