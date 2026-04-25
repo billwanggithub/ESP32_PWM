@@ -4,6 +4,27 @@
   // ---------- shared helpers ----------
   const clamp = (v, lo, hi) => Math.max(lo, Math.min(hi, v));
 
+  // ---------- Device info (Help block, fetched once) ----------
+  async function loadDeviceInfo() {
+    try {
+      const r = await fetch('/api/device_info');
+      if (!r.ok) throw new Error(r.status);
+      const info = await r.json();
+      document.querySelectorAll('[data-pin]').forEach(el => {
+        const v = info.pins ? info.pins[el.dataset.pin] : undefined;
+        el.textContent = (v ?? '?').toString();
+      });
+      const map = { freq_min: info.freq_hz_min, freq_max: info.freq_hz_max };
+      document.querySelectorAll('[data-info]').forEach(el => {
+        const v = map[el.dataset.info];
+        el.textContent = (v ?? '?').toString();
+      });
+    } catch (e) {
+      // Help block stays usable with '?' placeholders. Other features unaffected.
+    }
+  }
+  loadDeviceInfo();
+
   const lastSent = { freq: 1000, duty: 0 };
   function sendPwm(freq, duty) {
     if (ws.readyState !== WebSocket.OPEN) return;
@@ -108,7 +129,7 @@
       });
     });
 
-    // Presets — load from storage or defaults; render slots; wire 套用 + edit
+    // Presets — load from storage or defaults; render slots; wire Apply + edit
     function loadPresets() {
       try {
         const raw = localStorage.getItem(presetStorageKey);
@@ -140,7 +161,7 @@
         savePresets(presets);
       });
       const btn = document.createElement('button');
-      btn.textContent = '套用';
+      btn.textContent = 'Apply';
       btn.addEventListener('click', () => {
         setLocal(presets[i], { commit: true });
       });
@@ -336,7 +357,7 @@
     document.getElementById('rpm-settings').open = false;
   });
 
-  // Close RPM 設定 popover when clicking outside it
+  // Close RPM Settings popover when clicking outside it
   document.addEventListener('click', (ev) => {
     const settings = document.getElementById('rpm-settings');
     if (settings.open && !settings.contains(ev.target)) settings.open = false;
