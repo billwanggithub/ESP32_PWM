@@ -20,7 +20,52 @@ static const char *TAG = "psu_modbus";
 #define NVS_NAMESPACE     "psu_modbus"
 #define NVS_KEY_SLAVE     "slave_addr"
 
+// ---- Riden RD60xx register map -------------------------------------------
+#define REG_MODEL    0x0000
+#define REG_V_SET    0x0008
+#define REG_I_SET    0x0009
+#define REG_V_OUT    0x000A
+#define REG_I_OUT    0x000B
+#define REG_OUTPUT   0x0012
+
+#define POLL_PERIOD_MS       200    // 5 Hz
+#define LINK_FAIL_THRESHOLD  5
+
 static _Atomic uint8_t s_slave_addr;
+
+// Atomic publish — bit-punned floats and bools.
+static _Atomic uint32_t s_v_set_bits, s_i_set_bits, s_v_out_bits, s_i_out_bits;
+static _Atomic uint8_t  s_output_on;
+static _Atomic uint8_t  s_link_ok;
+static _Atomic uint16_t s_model_id;
+static _Atomic uint32_t s_i_scale_bits;   // float bit-punned, 100.0 or 1000.0
+
+static const struct { uint16_t id; const char *name; float i_scale; } RD_MODELS[] = {
+    { 60062, "RD6006",  1000.0f },
+    { 60065, "RD6006P", 1000.0f },
+    { 60121, "RD6012",   100.0f },
+    { 60125, "RD6012P",  100.0f },
+    { 60181, "RD6018",   100.0f },
+    { 60241, "RD6024",   100.0f },
+};
+#define RD_MODELS_N (sizeof(RD_MODELS) / sizeof(RD_MODELS[0]))
+
+static TaskHandle_t s_psu_task;
+
+static inline void store_f(_Atomic uint32_t *slot, float v)
+{
+    uint32_t bits;
+    memcpy(&bits, &v, sizeof(bits));
+    atomic_store_explicit(slot, bits, memory_order_relaxed);
+}
+
+static inline float load_f(_Atomic uint32_t *slot)
+{
+    uint32_t bits = atomic_load_explicit(slot, memory_order_relaxed);
+    float v;
+    memcpy(&v, &bits, sizeof(v));
+    return v;
+}
 
 // ---- Modbus-RTU CRC-16 (poly 0xA001, init 0xFFFF) -------------------------
 static uint16_t modbus_crc16(const uint8_t *buf, size_t len)
@@ -183,6 +228,88 @@ static esp_err_t psu_write_single(uint16_t addr, uint16_t val)
     return psu_txn(req, sizeof(req), resp, sizeof(resp));
 }
 
+// ---- Polling task helpers --------------------------------------------------
+
+static void detect_model(void)
+{
+    uint16_t model = 0;
+    if (psu_read_holding(REG_MODEL, 1, &model) != ESP_OK) {
+        ESP_LOGW(TAG, "model detect failed (PSU offline at boot?); falling back to RD6006 scale");
+        atomic_store_explicit(&s_model_id, 0, memory_order_relaxed);
+        store_f(&s_i_scale_bits, 1000.0f);
+        return;
+    }
+    float scale = 1000.0f;
+    const char *name = "unknown";
+    for (size_t i = 0; i < RD_MODELS_N; i++) {
+        if (RD_MODELS[i].id == model) {
+            scale = RD_MODELS[i].i_scale;
+            name  = RD_MODELS[i].name;
+            break;
+        }
+    }
+    atomic_store_explicit(&s_model_id, model, memory_order_relaxed);
+    store_f(&s_i_scale_bits, scale);
+    ESP_LOGI(TAG, "detected model %u (%s, I scale = ÷%.0f)",
+             model, name, (double)scale);
+}
+
+static void note_txn_result(esp_err_t e)
+{
+    static int fails = 0;
+    if (e == ESP_OK) {
+        if (fails >= LINK_FAIL_THRESHOLD) {
+            ESP_LOGI(TAG, "link recovered");
+        }
+        fails = 0;
+        atomic_store_explicit(&s_link_ok, 1, memory_order_relaxed);
+    } else {
+        if (fails < LINK_FAIL_THRESHOLD) fails++;
+        if (fails == LINK_FAIL_THRESHOLD) {
+            ESP_LOGW(TAG, "link lost: %s", esp_err_to_name(e));
+            atomic_store_explicit(&s_link_ok, 0, memory_order_relaxed);
+        }
+    }
+}
+
+static void psu_task_fn(void *arg)
+{
+    (void)arg;
+    detect_model();
+
+    const TickType_t period = pdMS_TO_TICKS(POLL_PERIOD_MS);
+    TickType_t last = xTaskGetTickCount();
+    while (true) {
+        // Re-detect once if we missed at boot AND link is now up — best-effort.
+        if (atomic_load_explicit(&s_model_id, memory_order_relaxed) == 0 &&
+            atomic_load_explicit(&s_link_ok,  memory_order_relaxed) == 1) {
+            detect_model();
+        }
+
+        // Read [V_SET, I_SET, V_OUT, I_OUT] in one transaction (4 contiguous regs).
+        uint16_t r[4] = {0};
+        esp_err_t e = psu_read_holding(REG_V_SET, 4, r);
+        note_txn_result(e);
+        if (e == ESP_OK) {
+            float i_div = load_f(&s_i_scale_bits);
+            store_f(&s_v_set_bits, r[0] / 100.0f);
+            store_f(&s_i_set_bits, r[1] / i_div);
+            store_f(&s_v_out_bits, r[2] / 100.0f);
+            store_f(&s_i_out_bits, r[3] / i_div);
+        }
+
+        // Read OUTPUT separately (non-contiguous with the V/I block).
+        uint16_t o = 0;
+        e = psu_read_holding(REG_OUTPUT, 1, &o);
+        note_txn_result(e);
+        if (e == ESP_OK) {
+            atomic_store_explicit(&s_output_on, o ? 1 : 0, memory_order_relaxed);
+        }
+
+        vTaskDelayUntil(&last, period);
+    }
+}
+
 // ---- Public API (Tasks 5-8) -----------------------------------------------
 
 esp_err_t psu_modbus_init(void)
@@ -214,7 +341,12 @@ esp_err_t psu_modbus_init(void)
              atomic_load_explicit(&s_slave_addr, memory_order_relaxed));
     return ESP_OK;
 }
-esp_err_t psu_modbus_start(void)           { ESP_LOGI(TAG, "start (stub)"); return ESP_OK; }
+esp_err_t psu_modbus_start(void)
+{
+    if (s_psu_task) return ESP_ERR_INVALID_STATE;
+    BaseType_t ok = xTaskCreate(psu_task_fn, "psu_modbus", 4096, NULL, 4, &s_psu_task);
+    return ok == pdPASS ? ESP_OK : ESP_ERR_NO_MEM;
+}
 esp_err_t psu_modbus_set_voltage(float v)  { (void)v; return ESP_OK; }
 esp_err_t psu_modbus_set_current(float i)  { (void)i; return ESP_OK; }
 esp_err_t psu_modbus_set_output(bool on)   { (void)on; return ESP_OK; }
@@ -235,10 +367,24 @@ esp_err_t psu_modbus_set_slave_addr(uint8_t addr)
 void psu_modbus_get_telemetry(psu_modbus_telemetry_t *out)
 {
     if (!out) return;
-    memset(out, 0, sizeof(*out));
+    out->v_set       = load_f(&s_v_set_bits);
+    out->i_set       = load_f(&s_i_set_bits);
+    out->v_out       = load_f(&s_v_out_bits);
+    out->i_out       = load_f(&s_i_out_bits);
+    out->output_on   = atomic_load_explicit(&s_output_on, memory_order_relaxed) != 0;
+    out->link_ok     = atomic_load_explicit(&s_link_ok,   memory_order_relaxed) != 0;
+    out->model_id    = atomic_load_explicit(&s_model_id,  memory_order_relaxed);
+    out->i_scale_div = load_f(&s_i_scale_bits);
 }
 
-const char *psu_modbus_get_model_name(void) { return "unknown"; }
+const char *psu_modbus_get_model_name(void)
+{
+    uint16_t id = atomic_load_explicit(&s_model_id, memory_order_relaxed);
+    for (size_t i = 0; i < RD_MODELS_N; i++) {
+        if (RD_MODELS[i].id == id) return RD_MODELS[i].name;
+    }
+    return "unknown";
+}
 
 // ---- Compile-time CRC sanity ----------------------------------------------
 // Modbus FAQ canonical request {01 03 00 08 00 05} → CRC 0x0944. modbus_crc16
