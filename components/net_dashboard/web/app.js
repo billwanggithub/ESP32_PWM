@@ -751,14 +751,14 @@
 
   // ---------- Pulse-width settings ----------
   const pulseWidthEl = document.getElementById('pulse-width-ms');
-  let pulseWidthFromDeviceArmed = false;
   function setPulseWidthFromDevice(ms) {
     if (!pulseWidthEl) return;
+    // Same focus-protection pattern the freq/duty readouts use: only the
+    // currently-typing user gets to keep their value; otherwise mirror the
+    // device. This means a CLI/HID/CDC change to pulse_width_ms is reflected
+    // here on the next telemetry tick.
     if (document.activeElement === pulseWidthEl) return;
-    if (!pulseWidthFromDeviceArmed) {
-      pulseWidthEl.value = String(ms);
-      pulseWidthFromDeviceArmed = true;
-    }
+    if (pulseWidthEl.value !== String(ms)) pulseWidthEl.value = String(ms);
   }
   const applyPulseBtn = document.getElementById('apply_pulse_width');
   if (applyPulseBtn) {

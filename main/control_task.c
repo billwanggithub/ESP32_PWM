@@ -62,17 +62,32 @@ static void control_task(void *arg)
             ESP_LOGI(TAG, "rpm timeout: %lu us",
                      (unsigned long)cmd.set_rpm_timeout.timeout_us);
             break;
-        case CTRL_CMD_GPIO_SET_MODE:
-            gpio_io_set_mode(cmd.gpio_set_mode.idx,
-                             (gpio_io_mode_t)cmd.gpio_set_mode.mode);
-            break;
-        case CTRL_CMD_GPIO_SET_LEVEL:
-            gpio_io_set_level(cmd.gpio_set_level.idx,
-                              cmd.gpio_set_level.level != 0);
-            break;
-        case CTRL_CMD_GPIO_PULSE:
-            gpio_io_pulse(cmd.gpio_pulse.idx, cmd.gpio_pulse.width_ms);
-            break;
+        case CTRL_CMD_GPIO_SET_MODE: {
+            esp_err_t e = gpio_io_set_mode(cmd.gpio_set_mode.idx,
+                                           (gpio_io_mode_t)cmd.gpio_set_mode.mode);
+            if (e != ESP_OK) {
+                ESP_LOGW(TAG, "gpio_set_mode(idx=%u, mode=%u) failed: %s",
+                         cmd.gpio_set_mode.idx, cmd.gpio_set_mode.mode,
+                         esp_err_to_name(e));
+            }
+        } break;
+        case CTRL_CMD_GPIO_SET_LEVEL: {
+            esp_err_t e = gpio_io_set_level(cmd.gpio_set_level.idx,
+                                            cmd.gpio_set_level.level != 0);
+            if (e != ESP_OK) {
+                ESP_LOGW(TAG, "gpio_set_level(idx=%u, level=%u) failed: %s",
+                         cmd.gpio_set_level.idx, cmd.gpio_set_level.level,
+                         esp_err_to_name(e));
+            }
+        } break;
+        case CTRL_CMD_GPIO_PULSE: {
+            esp_err_t e = gpio_io_pulse(cmd.gpio_pulse.idx, cmd.gpio_pulse.width_ms);
+            if (e != ESP_OK) {
+                ESP_LOGW(TAG, "gpio_pulse(idx=%u, width=%lu ms) failed: %s",
+                         cmd.gpio_pulse.idx, (unsigned long)cmd.gpio_pulse.width_ms,
+                         esp_err_to_name(e));
+            }
+        } break;
         case CTRL_CMD_POWER_SET:
             gpio_io_set_power(cmd.power_set.on != 0);
             break;
