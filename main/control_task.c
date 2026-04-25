@@ -100,6 +100,13 @@ static void control_task(void *arg)
             // Wired in Phase 5. For now, silently acknowledge so senders don't block.
             ESP_LOGW(TAG, "OTA command received but ota_core not wired yet");
             break;
+        case CTRL_CMD_PSU_SET_VOLTAGE:
+        case CTRL_CMD_PSU_SET_CURRENT:
+        case CTRL_CMD_PSU_SET_OUTPUT:
+        case CTRL_CMD_PSU_SET_SLAVE:
+            // Wired in Task 9. For now, silently acknowledge so senders don't block.
+            ESP_LOGW(TAG, "PSU command received but psu_modbus not wired yet");
+            break;
         }
     }
 }

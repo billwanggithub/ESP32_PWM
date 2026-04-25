@@ -25,6 +25,10 @@ typedef enum {
     CTRL_CMD_GPIO_PULSE,
     CTRL_CMD_POWER_SET,
     CTRL_CMD_PULSE_WIDTH_SET,
+    CTRL_CMD_PSU_SET_VOLTAGE,
+    CTRL_CMD_PSU_SET_CURRENT,
+    CTRL_CMD_PSU_SET_OUTPUT,
+    CTRL_CMD_PSU_SET_SLAVE,
 } ctrl_cmd_kind_t;
 
 typedef struct {
@@ -38,6 +42,10 @@ typedef struct {
         struct { uint8_t  idx; uint32_t width_ms; }    gpio_pulse;
         struct { uint8_t  on; }                        power_set;
         struct { uint32_t width_ms; }                  pulse_width_set;
+        struct { float    v;     }                     psu_set_voltage;
+        struct { float    i;     }                     psu_set_current;
+        struct { uint8_t  on;    }                     psu_set_output;
+        struct { uint8_t  addr;  }                     psu_set_slave;
     };
 } ctrl_cmd_t;
 
