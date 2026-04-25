@@ -8,6 +8,7 @@
 #include "freertos/task.h"
 #include "freertos/queue.h"
 
+#include "gpio_io.h"
 #include "pwm_gen.h"
 #include "rpm_cap.h"
 
@@ -60,6 +61,23 @@ static void control_task(void *arg)
             rpm_cap_set_timeout(cmd.set_rpm_timeout.timeout_us);
             ESP_LOGI(TAG, "rpm timeout: %lu us",
                      (unsigned long)cmd.set_rpm_timeout.timeout_us);
+            break;
+        case CTRL_CMD_GPIO_SET_MODE:
+            gpio_io_set_mode(cmd.gpio_set_mode.idx,
+                             (gpio_io_mode_t)cmd.gpio_set_mode.mode);
+            break;
+        case CTRL_CMD_GPIO_SET_LEVEL:
+            gpio_io_set_level(cmd.gpio_set_level.idx,
+                              cmd.gpio_set_level.level != 0);
+            break;
+        case CTRL_CMD_GPIO_PULSE:
+            gpio_io_pulse(cmd.gpio_pulse.idx, cmd.gpio_pulse.width_ms);
+            break;
+        case CTRL_CMD_POWER_SET:
+            gpio_io_set_power(cmd.power_set.on != 0);
+            break;
+        case CTRL_CMD_PULSE_WIDTH_SET:
+            gpio_io_set_pulse_width_ms(cmd.pulse_width_set.width_ms);
             break;
         case CTRL_CMD_OTA_BEGIN:
         case CTRL_CMD_OTA_CHUNK:
