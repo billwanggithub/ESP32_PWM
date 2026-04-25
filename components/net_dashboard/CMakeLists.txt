@@ -16,6 +16,7 @@ idf_component_register(
                 app_api
                 pwm_gen
                 rpm_cap
+                gpio_io
                 ota_core
                 # BOOT-button watcher in net_dashboard.c uses gpio_config/
                 # gpio_get_level (v6.0 moved these out of the driver umbrella).
