@@ -1,0 +1,20 @@
+menu "PSU driver"
+
+    config APP_PSU_UART_TX_GPIO
+        int "PSU UART1 TX GPIO"
+        default 38
+
+    config APP_PSU_UART_RX_GPIO
+        int "PSU UART1 RX GPIO"
+        default 39
+
+    config APP_PSU_UART_BAUD
+        int "PSU UART1 baud rate (matches the PSU's panel-set rate)"
+        default 19200
+
+    config APP_PSU_SLAVE_DEFAULT
+        int "PSU slave address default (used on first boot before NVS)"
+        default 1
+        range 1 255
+
+endmenu
