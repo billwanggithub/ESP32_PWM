@@ -9,6 +9,58 @@
 <body>
   <h1>Fan-TestKit Dashboard</h1>
 
+  <!-- ============== Help panel ============== -->
+  <details class="panel help-panel" id="help">
+    <summary>Help</summary>
+
+    <h3>Pin assignments</h3>
+    <ul id="help-pins">
+      <li>PWM output: GPIO<span data-pin="pwm">?</span></li>
+      <li>Change-trigger output: GPIO<span data-pin="trigger">?</span></li>
+      <li>RPM capture input: GPIO<span data-pin="rpm">?</span></li>
+      <li>Status LED (WS2812): GPIO<span data-pin="status_led">?</span></li>
+    </ul>
+
+    <h3>Duty / Frequency</h3>
+    <p>Drives the PWM-output pin. Frequency range
+       <span data-info="freq_min">?</span>&nbsp;Hz to
+       <span data-info="freq_max">?</span>&nbsp;Hz.
+       Duty resolution decreases at high frequencies — the live
+       "duty resolution at this freq" readout shows the current bit count.</p>
+
+    <h3>RPM</h3>
+    <p>Reads tach edges on the RPM-input pin.
+       <em>RPM = edges/sec × 60 / pole pairs.</em></p>
+    <ul>
+      <li><strong>Pole pairs</strong> — divider for edge frequency.</li>
+      <li><strong>Avg window</strong> — sliding-average sample count to smooth jitter.</li>
+      <li><strong>Timeout (µs)</strong> — if no edge arrives within this window, RPM falls to 0.</li>
+      <li><strong>Live</strong> toggle pauses the readout and chart without stopping the device.</li>
+    </ul>
+
+    <h3>Firmware Update</h3>
+    <p>Pick a <code>.bin</code> and click Upload. The device flashes to the
+       inactive OTA slot and reboots into it.</p>
+
+    <h3>Factory Reset</h3>
+    <p>Clears stored Wi-Fi credentials and reboots. Same effect as holding
+       the BOOT button for ≥ 3 seconds.</p>
+    <details class="dev-notes">
+      <summary>Developer notes</summary>
+      <p>The same reset is also reachable via USB HID report
+         <code>0x03</code> with magic byte <code>0xA5</code>, or USB CDC op
+         <code>0x20</code> with magic byte <code>0xA5</code>. All four
+         entry points land on <code>net_dashboard_factory_reset()</code>.</p>
+    </details>
+
+    <h3>Wi-Fi setup fallback</h3>
+    <p>If credentials are missing or wrong, the device opens an open SoftAP
+       named <code>Fan-TestKit-setup</code>. Connect from a phone — the
+       captive-portal page lets you enter SSID/password. After success the
+       dashboard is reachable at <code>fan-testkit.local</code> or the
+       assigned IP.</p>
+  </details>
+
   <!-- ============== RPM panel ============== -->
   <section class="panel">
     <div class="rpm-header">
@@ -16,7 +68,7 @@
       <span class="unit">RPM</span>
       <span class="spacer"></span>
       <details class="rpm-settings" id="rpm-settings">
-        <summary>RPM 設定</summary>
+        <summary>Settings</summary>
         <div class="popover">
           <div class="field">
             <span>Pole pairs</span>
@@ -36,7 +88,7 @@
     </div>
 
     <details id="rpm-chart-expander">
-      <summary>RPM 圖表</summary>
+      <summary>Chart</summary>
       <div class="chart-row">
         <div class="yaxis-col">
           <div class="y-label">RPM</div>
@@ -68,7 +120,7 @@
       <span class="label">Duty</span>
       <input class="readout-input" id="duty-readout" type="number" step="0.1" min="0" max="100" value="0" />
       <span class="unit">%</span>
-      <span class="label tight" style="margin-left:0.6em">步進</span>
+      <span class="label tight" style="margin-left:0.6em">Step</span>
       <input class="step" id="duty-step" type="number" step="0.1" min="0.1" value="1.0" />
       <span class="label tight">%</span>
     </div>
@@ -78,7 +130,7 @@
     <div class="ticks"><span>0%</span><span>50%</span><span>100%</span></div>
 
     <details open>
-      <summary>微調</summary>
+      <summary>Fine</summary>
       <div class="grid-finetune" id="duty-finetune">
         <button class="pos" data-delta="0.1">+0.1</button>
         <button class="pos" data-delta="1">+1</button>
@@ -90,7 +142,7 @@
     </details>
 
     <details open>
-      <summary>Duty 預設值</summary>
+      <summary>Presets</summary>
       <div class="preset-grid" id="duty-presets"></div>
     </details>
   </section>
@@ -98,10 +150,10 @@
   <!-- ============== Frequency panel ============== -->
   <section class="panel pwm-panel" id="freq-panel">
     <div class="row">
-      <span class="label">頻率</span>
+      <span class="label">Frequency</span>
       <input class="readout-input" id="freq-readout" type="number" step="1" min="10" max="1000000" value="1000" />
       <span class="unit">Hz</span>
-      <span class="label tight" style="margin-left:0.6em">步進</span>
+      <span class="label tight" style="margin-left:0.6em">Step</span>
       <input class="step" id="freq-step" type="number" step="1" min="1" value="100" />
       <span class="label tight">Hz</span>
     </div>
@@ -114,7 +166,7 @@
     <div class="resbits">duty resolution at this freq: <span id="freq-resbits">—</span> bits</div>
 
     <details>
-      <summary>微調</summary>
+      <summary>Fine</summary>
       <div class="grid-finetune" id="freq-finetune">
         <button class="pos" data-delta="1">+1</button>
         <button class="pos" data-delta="10">+10</button>
@@ -126,7 +178,7 @@
     </details>
 
     <details>
-      <summary>頻率預設值</summary>
+      <summary>Presets</summary>
       <div class="preset-grid" id="freq-presets"></div>
     </details>
   </section>
