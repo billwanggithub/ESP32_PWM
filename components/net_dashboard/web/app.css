@@ -694,3 +694,76 @@ button.danger[disabled] {
   text-transform: none;
   letter-spacing: normal;
 }
+
+/* ---------- Power switch ---------- */
+.big-toggle {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.5em;
+  font-size: 1.4em;
+  padding: 0.5em 1.2em;
+  background: var(--surface-2, #2a2a2a);
+  color: var(--fg, #e6e6e6);
+  border: 1px solid var(--border, #3a3a3a);
+  border-radius: 0.5em;
+  cursor: pointer;
+}
+.big-toggle .ico { font-size: 1.5em; }
+.big-toggle.on  { background: var(--danger, #c62828); color: #fff; border-color: var(--danger, #c62828); }
+
+/* ---------- GPIO panel ---------- */
+.gpio-panel .gpio-group { margin-top: 0.8em; }
+.gpio-panel h3 { margin: 0 0 0.4em 0; font-size: 1em; opacity: 0.8; }
+
+.gpio-rows {
+  display: grid;
+  grid-template-columns: 1fr;
+  gap: 0.4em;
+}
+.gpio-row {
+  display: grid;
+  grid-template-columns: 2.4em 4.4em 12em 1fr;
+  align-items: center;
+  gap: 0.6em;
+  padding: 0.3em 0.5em;
+  background: var(--surface-2, #1f1f1f);
+  border: 1px solid var(--border, #2f2f2f);
+  border-radius: 0.4em;
+}
+.gpio-row.pulsing { opacity: 0.55; }
+.gpio-row .gpio-name { font-weight: 600; }
+.gpio-row .gpio-pinnum { opacity: 0.7; font-family: ui-monospace, monospace; }
+.gpio-row .gpio-mode { width: 100%; }
+.gpio-row .gpio-tail { display: flex; align-items: center; gap: 0.6em; }
+.gpio-row .gpio-input-tail,
+.gpio-row .gpio-output-tail {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.4em;
+}
+.gpio-row .gpio-output-tail[hidden],
+.gpio-row .gpio-input-tail[hidden] { display: none; }
+.gpio-row .gpio-value {
+  font-family: ui-monospace, monospace;
+  min-width: 1ch;
+}
+.gpio-row .gpio-toggle {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.3em;
+}
+.gpio-row .gpio-pulse { padding: 0.2em 0.6em; }
+.gpio-row .gpio-pulse:disabled,
+.gpio-row .gpio-level:disabled,
+.gpio-row .gpio-mode:disabled { cursor: not-allowed; }
+
+/* Narrow viewport: stack columns */
+@media (max-width: 560px) {
+  .gpio-row {
+    grid-template-columns: 2.4em 1fr;
+    grid-auto-rows: auto;
+  }
+  .gpio-row .gpio-mode  { grid-column: 1 / -1; }
+  .gpio-row .gpio-tail  { grid-column: 1 / -1; }
+  .gpio-row .gpio-pinnum { grid-column: 2; }
+}
