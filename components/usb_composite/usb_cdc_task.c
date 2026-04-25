@@ -12,6 +12,8 @@
 #include "tusb_cdc_acm.h"
 
 #include "usb_protocol.h"
+#include "app_api.h"
+#include "gpio_io.h"
 #include "ota_core.h"
 #include "net_dashboard.h"
 
@@ -106,6 +108,48 @@ static void handle_frame(const uint8_t *data, size_t len)
     case USB_CDC_OP_OTA_END: {
         send_ota_status(OTA_STATE_DONE, ota_core_progress(), 0);
         ota_core_end_and_reboot();   // does not return on success
+    } break;
+    case USB_CDC_OP_GPIO_SET_MODE: {
+        if (plen < 2) break;
+        ctrl_cmd_t c = {
+            .kind = CTRL_CMD_GPIO_SET_MODE,
+            .gpio_set_mode = { .idx = payload[0], .mode = payload[1] },
+        };
+        control_task_post(&c, 0);
+    } break;
+    case USB_CDC_OP_GPIO_SET_LEVEL: {
+        if (plen < 2) break;
+        ctrl_cmd_t c = {
+            .kind = CTRL_CMD_GPIO_SET_LEVEL,
+            .gpio_set_level = { .idx = payload[0], .level = payload[1] ? 1u : 0u },
+        };
+        control_task_post(&c, 0);
+    } break;
+    case USB_CDC_OP_GPIO_PULSE: {
+        if (plen < 3) break;
+        uint16_t width = (uint16_t)payload[1] | ((uint16_t)payload[2] << 8);
+        ctrl_cmd_t c = {
+            .kind = CTRL_CMD_GPIO_PULSE,
+            .gpio_pulse = { .idx = payload[0], .width_ms = width },
+        };
+        control_task_post(&c, 0);
+    } break;
+    case USB_CDC_OP_POWER: {
+        if (plen < 1) break;
+        ctrl_cmd_t c = {
+            .kind = CTRL_CMD_POWER_SET,
+            .power_set = { .on = payload[0] ? 1u : 0u },
+        };
+        control_task_post(&c, 0);
+    } break;
+    case USB_CDC_OP_PULSE_WIDTH_SET: {
+        if (plen < 2) break;
+        uint16_t w = (uint16_t)payload[0] | ((uint16_t)payload[1] << 8);
+        ctrl_cmd_t c = {
+            .kind = CTRL_CMD_PULSE_WIDTH_SET,
+            .pulse_width_set = { .width_ms = w },
+        };
+        control_task_post(&c, 0);
     } break;
     case USB_CDC_OP_FACTORY_RESET: {
         // Magic byte guards against stray frames — 1-byte payload with 0xA5.
