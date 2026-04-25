@@ -83,6 +83,34 @@ static esp_err_t apply_mode_to_hw(uint8_t idx, gpio_io_mode_t mode)
     return gpio_config(&cfg);
 }
 
+// ---- input poll task (20 Hz) -----------------------------------------------
+
+static void gpio_io_poll_task(void *arg)
+{
+    (void)arg;
+    const TickType_t period = pdMS_TO_TICKS(50);   // 20 Hz
+    TickType_t last = xTaskGetTickCount();
+    while (true) {
+        vTaskDelayUntil(&last, period);
+        for (int i = 0; i < GPIO_IO_PIN_COUNT; i++) {
+            uint8_t s = atomic_load_explicit(&s_state[i], memory_order_relaxed);
+            gpio_io_mode_t m = STATE_MODE(s);
+            if (m == GPIO_IO_MODE_OUTPUT) continue;
+            int level = gpio_get_level(s_pins[i]);
+            uint8_t ns = MAKE_STATE(m, level, STATE_PULSING(s));
+            if (ns == s) continue;
+            // CAS guards the cross-core race: control_task on core 0 may flip
+            // the pin to OUTPUT (or pulse end-callback may clear pulsing)
+            // between the load above and this store. If the word changed, drop
+            // this sample — the next tick re-evaluates from fresh state.
+            uint8_t expected = s;
+            (void)atomic_compare_exchange_strong_explicit(
+                &s_state[i], &expected, ns,
+                memory_order_relaxed, memory_order_relaxed);
+        }
+    }
+}
+
 // ---- public API ------------------------------------------------------------
 
 esp_err_t gpio_io_init(void)
@@ -106,6 +134,12 @@ esp_err_t gpio_io_init(void)
         }
         atomic_store_explicit(&s_state[i], MAKE_STATE(m, 0, 0),
                               memory_order_relaxed);
+    }
+
+    BaseType_t ok = xTaskCreate(gpio_io_poll_task, "gpio_io_poll", 2048, NULL, 2, NULL);
+    if (ok != pdPASS) {
+        ESP_LOGE(TAG, "poll task create failed");
+        return ESP_ERR_NO_MEM;
     }
 
     ESP_LOGI(TAG, "gpio_io ready: 8 inputs (pull-down), 8 outputs (low)");
