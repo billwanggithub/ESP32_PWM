@@ -11,6 +11,7 @@
 
 #include "app_api.h"
 #include "gpio_io.h"
+#include "psu_modbus.h"
 #include "pwm_gen.h"
 #include "rpm_cap.h"
 #include "net_dashboard.h"
@@ -131,6 +132,41 @@ static void handle_json(cJSON *root, int fd)
             .pulse_width_set = { .width_ms = (uint32_t)w->valuedouble },
         };
         control_task_post(&c, 0);
+    } else if (strcmp(type_j->valuestring, "set_psu_voltage") == 0) {
+        const cJSON *v = cJSON_GetObjectItem(root, "v");
+        if (!cJSON_IsNumber(v)) return;
+        ctrl_cmd_t c = {
+            .kind = CTRL_CMD_PSU_SET_VOLTAGE,
+            .psu_set_voltage = { .v = (float)v->valuedouble },
+        };
+        control_task_post(&c, 0);
+    } else if (strcmp(type_j->valuestring, "set_psu_current") == 0) {
+        const cJSON *i = cJSON_GetObjectItem(root, "i");
+        if (!cJSON_IsNumber(i)) return;
+        ctrl_cmd_t c = {
+            .kind = CTRL_CMD_PSU_SET_CURRENT,
+            .psu_set_current = { .i = (float)i->valuedouble },
+        };
+        control_task_post(&c, 0);
+    } else if (strcmp(type_j->valuestring, "set_psu_output") == 0) {
+        const cJSON *on = cJSON_GetObjectItem(root, "on");
+        if (!cJSON_IsBool(on) && !cJSON_IsNumber(on)) return;
+        bool b = cJSON_IsBool(on) ? cJSON_IsTrue(on) : (on->valuedouble != 0);
+        ctrl_cmd_t c = {
+            .kind = CTRL_CMD_PSU_SET_OUTPUT,
+            .psu_set_output = { .on = b ? 1u : 0u },
+        };
+        control_task_post(&c, 0);
+    } else if (strcmp(type_j->valuestring, "set_psu_slave") == 0) {
+        const cJSON *a = cJSON_GetObjectItem(root, "addr");
+        if (!cJSON_IsNumber(a)) return;
+        int v = (int)a->valuedouble;
+        if (v < 1 || v > 247) return;
+        ctrl_cmd_t c = {
+            .kind = CTRL_CMD_PSU_SET_SLAVE,
+            .psu_set_slave = { .addr = (uint8_t)v },
+        };
+        control_task_post(&c, 0);
     } else if (strcmp(type_j->valuestring, "factory_reset") == 0) {
         ESP_LOGW(TAG, "factory_reset requested via ws fd=%d", fd);
         ws_send_json_to(fd, "{\"type\":\"ack\",\"op\":\"factory_reset\"}");
@@ -201,7 +237,24 @@ static void telemetry_task(void *arg)
                           st[i].pulsing ? 1 : 0);
         }
         if (n < (int)sizeof(payload)) {
-            n += snprintf(payload + n, sizeof(payload) - n, "]}");
+            n += snprintf(payload + n, sizeof(payload) - n, "]");
+        }
+
+        psu_modbus_telemetry_t pt;
+        psu_modbus_get_telemetry(&pt);
+        if (n < (int)sizeof(payload)) {
+            n += snprintf(payload + n, sizeof(payload) - n,
+                ",\"psu\":{\"v_set\":%.2f,\"i_set\":%.3f,\"v_out\":%.2f,\"i_out\":%.3f,"
+                "\"output\":%s,\"link\":%s,\"model\":\"%s\",\"slave\":%u}",
+                (double)pt.v_set, (double)pt.i_set,
+                (double)pt.v_out, (double)pt.i_out,
+                pt.output_on ? "true" : "false",
+                pt.link_ok   ? "true" : "false",
+                psu_modbus_get_model_name(),
+                psu_modbus_get_slave_addr());
+        }
+        if (n < (int)sizeof(payload)) {
+            n += snprintf(payload + n, sizeof(payload) - n, "}");
         }
 
         for (int i = 0; i < MAX_CLIENTS; i++) {
