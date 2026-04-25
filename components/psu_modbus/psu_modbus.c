@@ -8,6 +8,8 @@
 #include "nvs.h"
 #include "nvs_flash.h"
 #include "sdkconfig.h"
+#include "freertos/FreeRTOS.h"
+#include "freertos/task.h"
 
 static const char *TAG = "psu_modbus";
 
@@ -102,6 +104,83 @@ static void save_slave_addr_to_nvs(uint8_t v)
     nvs_set_u8(h, NVS_KEY_SLAVE, v);
     nvs_commit(h);
     nvs_close(h);
+}
+
+// ---- Modbus-RTU transaction primitive --------------------------------------
+
+#define PSU_TXN_TIMEOUT_MS   100
+#define PSU_INTERFRAME_MS    2     // 3.5-char gap @ 19200 ≈ 1.8 ms
+
+// Result codes folded into esp_err_t:
+//   ESP_OK            : valid response, CRC ok
+//   ESP_ERR_TIMEOUT   : no/short response within timeout
+//   ESP_ERR_INVALID_CRC : full-length response but CRC mismatch
+//   ESP_ERR_INVALID_RESPONSE : Modbus exception (fc | 0x80) or wrong slave/fc
+//
+// `expect_len` is the total expected response length (header + data + CRC).
+// Caller is responsible for sizing `resp` >= `expect_len`.
+static esp_err_t psu_txn(const uint8_t *req, size_t req_len,
+                         uint8_t *resp, size_t expect_len)
+{
+    uart_flush_input(PSU_UART_PORT);
+
+    int written = uart_write_bytes(PSU_UART_PORT, (const char *)req, req_len);
+    if (written != (int)req_len) return ESP_ERR_INVALID_STATE;
+    esp_err_t e = uart_wait_tx_done(PSU_UART_PORT, pdMS_TO_TICKS(50));
+    if (e != ESP_OK) return e;
+
+    int got = uart_read_bytes(PSU_UART_PORT, resp, expect_len,
+                              pdMS_TO_TICKS(PSU_TXN_TIMEOUT_MS));
+    // Inter-frame gap before the next transaction.
+    vTaskDelay(pdMS_TO_TICKS(PSU_INTERFRAME_MS));
+
+    if (got <= 0) return ESP_ERR_TIMEOUT;
+    if ((size_t)got < expect_len) {
+        // Could be exception response: 5 bytes [slave][fc|0x80][exc][crc][crc]
+        if (got >= 5 && (resp[1] & 0x80)) {
+            if (verify_crc(resp, 5)) {
+                ESP_LOGW(TAG, "modbus exception: fc=0x%02X exc=0x%02X",
+                         resp[1] & 0x7F, resp[2]);
+                return ESP_ERR_INVALID_RESPONSE;
+            }
+        }
+        return ESP_ERR_TIMEOUT;
+    }
+    if (!verify_crc(resp, expect_len)) return ESP_ERR_INVALID_CRC;
+    if (resp[0] != req[0])             return ESP_ERR_INVALID_RESPONSE;   // wrong slave echo
+    if ((resp[1] & 0x7F) != (req[1] & 0x7F)) return ESP_ERR_INVALID_RESPONSE;
+    if (resp[1] & 0x80)                return ESP_ERR_INVALID_RESPONSE;   // exception
+    return ESP_OK;
+}
+
+static esp_err_t psu_read_holding(uint16_t addr, uint16_t n, uint16_t *out_regs)
+{
+    uint8_t slave = atomic_load_explicit(&s_slave_addr, memory_order_relaxed);
+    uint8_t req[8];
+    build_read_holding(req, slave, addr, n);
+
+    // FC 0x03 response: [slave][0x03][bytecount][N×2 bytes][crc][crc]
+    size_t expect = 5 + n * 2;
+    uint8_t resp[64];
+    if (expect > sizeof(resp)) return ESP_ERR_INVALID_SIZE;
+    esp_err_t e = psu_txn(req, sizeof(req), resp, expect);
+    if (e != ESP_OK) return e;
+    if (resp[2] != n * 2) return ESP_ERR_INVALID_RESPONSE;
+    for (uint16_t i = 0; i < n; i++) {
+        out_regs[i] = ((uint16_t)resp[3 + i * 2] << 8) | resp[4 + i * 2];
+    }
+    return ESP_OK;
+}
+
+static esp_err_t psu_write_single(uint16_t addr, uint16_t val)
+{
+    uint8_t slave = atomic_load_explicit(&s_slave_addr, memory_order_relaxed);
+    uint8_t req[8];
+    build_write_single(req, slave, addr, val);
+
+    // FC 0x06 echoes the request: 8 bytes total.
+    uint8_t resp[8];
+    return psu_txn(req, sizeof(req), resp, sizeof(resp));
 }
 
 // ---- Public API (Tasks 5-8) -----------------------------------------------
