@@ -35,6 +35,9 @@ void psu_driver_get_telemetry(psu_driver_telemetry_t *out);
 const char *psu_driver_get_model_name(void);   // "RD6006" | "XY-SK120" | "WZ5005" | "unknown"
 float       psu_driver_get_i_max(void);        // model-aware A; 6.0 if not yet detected
 
+const char *psu_driver_get_family(void);                 // active backend name
+esp_err_t   psu_driver_set_family(const char *name);     // NVS-set; effective on reboot
+
 #ifdef __cplusplus
 }
 #endif
