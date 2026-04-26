@@ -12,6 +12,7 @@
 
 #include "app_api.h"
 #include "gpio_io.h"
+#include "ip_announcer.h"
 #include "psu_driver.h"
 #include "pwm_gen.h"
 #include "rpm_cap.h"
@@ -221,6 +222,36 @@ static void handle_json(cJSON *root, int fd)
                  "{\"type\":\"ack\",\"op\":\"set_psu_family\",\"ok\":%s}",
                  e == ESP_OK ? "true" : "false");
         ws_send_json_to(fd, ack);
+    } else if (strcmp(type_j->valuestring, "set_announcer") == 0) {
+        const cJSON *en = cJSON_GetObjectItem(root, "enable");
+        const cJSON *tp = cJSON_GetObjectItem(root, "topic");
+        const cJSON *sv = cJSON_GetObjectItem(root, "server");
+        const cJSON *pr = cJSON_GetObjectItem(root, "priority");
+        if (!cJSON_IsString(tp) || !cJSON_IsString(sv) || !cJSON_IsNumber(pr)) {
+            ws_send_json_to(fd, "{\"type\":\"ack\",\"op\":\"set_announcer\",\"ok\":false}");
+            return;
+        }
+        ctrl_cmd_t c = {
+            .kind = CTRL_CMD_ANNOUNCER_SET,
+            .announcer_set = {
+                .enable   = cJSON_IsBool(en) ? (cJSON_IsTrue(en) ? 1 : 0)
+                                              : (en && cJSON_IsNumber(en)
+                                                 && en->valuedouble != 0 ? 1 : 0),
+                .priority = (uint8_t)pr->valuedouble,
+            },
+        };
+        strncpy(c.announcer_set.topic, tp->valuestring,
+                sizeof(c.announcer_set.topic) - 1);
+        c.announcer_set.topic[sizeof(c.announcer_set.topic) - 1] = '\0';
+        strncpy(c.announcer_set.server, sv->valuestring,
+                sizeof(c.announcer_set.server) - 1);
+        c.announcer_set.server[sizeof(c.announcer_set.server) - 1] = '\0';
+        control_task_post(&c, 0);
+        ws_send_json_to(fd, "{\"type\":\"ack\",\"op\":\"set_announcer\",\"ok\":true}");
+    } else if (strcmp(type_j->valuestring, "test_announcer") == 0) {
+        ctrl_cmd_t c = { .kind = CTRL_CMD_ANNOUNCER_TEST };
+        control_task_post(&c, 0);
+        ws_send_json_to(fd, "{\"type\":\"ack\",\"op\":\"test_announcer\",\"ok\":true}");
     } else if (strcmp(type_j->valuestring, "reboot") == 0) {
         ESP_LOGW(TAG, "reboot requested via ws fd=%d", fd);
         ws_send_json_to(fd, "{\"type\":\"ack\",\"op\":\"reboot\"}");
@@ -320,6 +351,25 @@ static void telemetry_task(void *arg)
             n += snprintf(payload + n, sizeof(payload) - n,
                 ",\"ui\":{\"duty_step\":%.2f,\"freq_step\":%u}",
                 (double)ui_duty_step, (unsigned)ui_freq_step);
+        }
+        ip_announcer_settings_t  ann_s;
+        ip_announcer_telemetry_t ann_t;
+        ip_announcer_get_settings(&ann_s);
+        ip_announcer_get_telemetry(&ann_t);
+        static const char *status_str[] = { "never", "ok", "failed", "disabled" };
+        if (n < (int)sizeof(payload)) {
+            n += snprintf(payload + n, sizeof(payload) - n,
+                ",\"announcer\":{\"enable\":%s,\"topic\":\"%s\",\"server\":\"%s\","
+                "\"priority\":%u,\"status\":\"%s\","
+                "\"last_pushed_ip\":\"%s\",\"last_http_code\":%d,\"last_err\":\"%s\"}",
+                ann_s.enable ? "true" : "false",
+                ann_s.topic,
+                ann_s.server,
+                (unsigned)ann_s.priority,
+                status_str[ann_t.status],
+                ann_t.last_pushed_ip,
+                ann_t.last_http_code,
+                ann_t.last_err);
         }
         if (n < (int)sizeof(payload)) {
             n += snprintf(payload + n, sizeof(payload) - n, "}");
