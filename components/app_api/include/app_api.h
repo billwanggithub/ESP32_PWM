@@ -20,6 +20,7 @@ typedef enum {
     CTRL_CMD_SAVE_RPM_PARAMS,
     CTRL_CMD_SAVE_RPM_TIMEOUT,
     CTRL_CMD_SAVE_PWM_FREQ,
+    CTRL_CMD_SAVE_UI_STEPS,
     CTRL_CMD_OTA_BEGIN,
     CTRL_CMD_OTA_CHUNK,
     CTRL_CMD_OTA_END,
@@ -49,6 +50,7 @@ typedef struct {
         struct { float    i;     }                     psu_set_current;
         struct { uint8_t  on;    }                     psu_set_output;
         struct { uint8_t  addr;  }                     psu_set_slave;
+        struct { float duty_step; uint16_t freq_step; }   save_ui_steps;
     };
 } ctrl_cmd_t;
 

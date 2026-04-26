@@ -17,9 +17,10 @@
 #include "pwm_gen.h"
 #include "rpm_cap.h"
 #include "app_api.h"
-#include "usb_composite.h"
 #include "net_dashboard.h"
 #include "ota_core.h"
+#include "ui_settings.h"
+#include "usb_composite.h"
 
 static const char *TAG = "app";
 
@@ -534,6 +535,8 @@ void app_main(void)
         };
         control_task_post(&boot_pwr, pdMS_TO_TICKS(100));
     }
+
+    ESP_ERROR_CHECK(ui_settings_init());
 
     // USB composite on the native USB2 port (GPIO19/20). Requires the
     // board's USB-OTG 0 Ω jumper to be bridged.

@@ -10,6 +10,7 @@ idf_component_register(
                 ota_core
                 gpio_io
                 psu_driver
+                ui_settings
                 esp_event
                 esp_timer
                 console

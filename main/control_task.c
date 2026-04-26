@@ -12,6 +12,7 @@
 #include "psu_driver.h"
 #include "pwm_gen.h"
 #include "rpm_cap.h"
+#include "ui_settings.h"
 
 static const char *TAG = "control";
 
@@ -74,6 +75,11 @@ static void control_task(void *arg)
         case CTRL_CMD_SAVE_PWM_FREQ: {
             esp_err_t e = pwm_gen_save_current_freq_to_nvs();
             if (e != ESP_OK) ESP_LOGW(TAG, "save_pwm_freq failed: %s", esp_err_to_name(e));
+        } break;
+        case CTRL_CMD_SAVE_UI_STEPS: {
+            esp_err_t e = ui_settings_save_steps(cmd.save_ui_steps.duty_step,
+                                                  cmd.save_ui_steps.freq_step);
+            if (e != ESP_OK) ESP_LOGW(TAG, "save_ui_steps failed: %s", esp_err_to_name(e));
         } break;
         case CTRL_CMD_GPIO_SET_MODE: {
             esp_err_t e = gpio_io_set_mode(cmd.gpio_set_mode.idx,

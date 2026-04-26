@@ -15,6 +15,7 @@
 #include "psu_driver.h"
 #include "pwm_gen.h"
 #include "rpm_cap.h"
+#include "ui_settings.h"
 #include "net_dashboard.h"
 
 static const char *TAG = "ws";
@@ -104,6 +105,22 @@ static void handle_json(cJSON *root, int fd)
         ctrl_cmd_t c = { .kind = CTRL_CMD_SAVE_PWM_FREQ };
         control_task_post(&c, 0);
         ws_send_json_to(fd, "{\"type\":\"ack\",\"op\":\"save_pwm_freq\",\"ok\":true}");
+    } else if (strcmp(type_j->valuestring, "save_ui_steps") == 0) {
+        const cJSON *ds = cJSON_GetObjectItem(root, "duty_step");
+        const cJSON *fs = cJSON_GetObjectItem(root, "freq_step");
+        if (cJSON_IsNumber(ds) && cJSON_IsNumber(fs)) {
+            ctrl_cmd_t c = {
+                .kind = CTRL_CMD_SAVE_UI_STEPS,
+                .save_ui_steps = {
+                    .duty_step = (float)ds->valuedouble,
+                    .freq_step = (uint16_t)fs->valuedouble,
+                },
+            };
+            control_task_post(&c, 0);
+            ws_send_json_to(fd, "{\"type\":\"ack\",\"op\":\"save_ui_steps\",\"ok\":true}");
+        } else {
+            ws_send_json_to(fd, "{\"type\":\"ack\",\"op\":\"save_ui_steps\",\"ok\":false}");
+        }
     } else if (strcmp(type_j->valuestring, "set_gpio_mode") == 0) {
         const cJSON *idx  = cJSON_GetObjectItem(root, "idx");
         const cJSON *mode = cJSON_GetObjectItem(root, "mode");
@@ -296,6 +313,13 @@ static void telemetry_task(void *arg)
                 psu_driver_get_model_name(),
                 psu_driver_get_slave_addr(),
                 psu_driver_get_family());
+        }
+        float ui_duty_step; uint16_t ui_freq_step;
+        ui_settings_get_steps(&ui_duty_step, &ui_freq_step);
+        if (n < (int)sizeof(payload)) {
+            n += snprintf(payload + n, sizeof(payload) - n,
+                ",\"ui\":{\"duty_step\":%.2f,\"freq_step\":%u}",
+                (double)ui_duty_step, (unsigned)ui_freq_step);
         }
         if (n < (int)sizeof(payload)) {
             n += snprintf(payload + n, sizeof(payload) - n, "}");
