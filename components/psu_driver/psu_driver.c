@@ -118,7 +118,13 @@ static void load_nvs_state(void)
         atomic_store_explicit(&s_slave_addr,
                               (uint8_t)CONFIG_APP_PSU_SLAVE_DEFAULT,
                               memory_order_relaxed);
+#if defined(CONFIG_APP_PSU_DEFAULT_FAMILY_XY_SK120)
+        s_backend = &psu_backend_xy_sk120;
+#elif defined(CONFIG_APP_PSU_DEFAULT_FAMILY_WZ5005)
+        s_backend = &psu_backend_wz5005;
+#else
         s_backend = &psu_backend_riden;
+#endif
         return;
     }
     uint8_t v = (uint8_t)CONFIG_APP_PSU_SLAVE_DEFAULT;
@@ -129,7 +135,13 @@ static void load_nvs_state(void)
     char name[16] = {0};
     size_t n = sizeof(name);
     if (nvs_get_str(h, NVS_KEY_FAMILY, name, &n) != ESP_OK) {
+#if defined(CONFIG_APP_PSU_DEFAULT_FAMILY_XY_SK120)
+        s_backend = &psu_backend_xy_sk120;
+#elif defined(CONFIG_APP_PSU_DEFAULT_FAMILY_WZ5005)
+        s_backend = &psu_backend_wz5005;
+#else
         s_backend = &psu_backend_riden;
+#endif
     } else {
         s_backend = resolve_backend_by_name(name);
     }

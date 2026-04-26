@@ -8,9 +8,25 @@ menu "PSU driver"
         int "PSU UART1 RX GPIO"
         default 39
 
+    choice APP_PSU_DEFAULT_FAMILY
+        prompt "Default PSU family (used when NVS key absent)"
+        default APP_PSU_DEFAULT_FAMILY_RIDEN
+    config APP_PSU_DEFAULT_FAMILY_RIDEN
+        bool "Riden RD60xx (Modbus-RTU)"
+    config APP_PSU_DEFAULT_FAMILY_XY_SK120
+        bool "XY-SK120 (Modbus-RTU)"
+    config APP_PSU_DEFAULT_FAMILY_WZ5005
+        bool "WZ5005 (custom 20-byte protocol)"
+    endchoice
+
+    # Each family's default tracks the PSU's factory-shipped baud:
+    #   Riden RD60xx → 115200, XY-SK120 → 115200, WZ5005 → 19200.
+    # If the bench unit's panel has been re-keyed, override per-build.
     config APP_PSU_UART_BAUD
         int "PSU UART1 baud rate (matches the PSU's panel-set rate)"
-        default 19200
+        default 115200 if APP_PSU_DEFAULT_FAMILY_RIDEN
+        default 115200 if APP_PSU_DEFAULT_FAMILY_XY_SK120
+        default 19200  if APP_PSU_DEFAULT_FAMILY_WZ5005
 
     config APP_PSU_SLAVE_DEFAULT
         int "PSU slave address default (used on first boot before NVS)"
