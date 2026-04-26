@@ -230,27 +230,49 @@ GPIO at a time, so cross-band swaps would need full generator
 delete+recreate — slower than the current TEZ-based reconfigure). Both
 are bigger refactors.
 
-### v6.0 band-cross workaround (timing-sensitive)
+### v6.0 band-cross shadow-register flush
 
-After the v6.0 migration, the first HI→LO band cross emits an output
-frequency 16× higher than requested (e.g. 100 Hz outputs as 1.6 kHz —
-period correct, but timer_prescale 16 from HI carries over instead of
-LO's 256). The fix that consistently works:
+ESP32-S3 MCPWM `timer_period` and `timer_prescale` live in shadow
+registers, with `timer_period_upmethod` selecting when shadow→active
+copies. v6.0 `mcpwm_new_timer` sets `upmethod=0` ("immediate"), but
+the active flush is **not** actually atomic with the shadow write.
+Direct evidence (via `timer_status.timer_value` readback right after
+`mcpwm_new_timer` returns): on a band cross, the counter is sometimes
+still at the OLD peak (e.g. ~25000) while the shadow has the NEW peak
+(e.g. 2000), and counter increment-rate measurement shows the active
+prescale is also stale. The on-pin symptom is `old_resolution /
+new_shadow_peak`, e.g. a 1 kHz request outputs 62.5 Hz
+(= 625 kHz / 10000) or a 100 Hz request outputs 1.6 kHz
+(= 10 MHz / 6250).
 
-1. `sdkconfig.defaults` sets `CONFIG_LOG_MAXIMUM_LEVEL_DEBUG=y` so the
-   driver's `LOGD` calls are compiled in (not no-op'd).
-2. `pwm_gen_init()` calls `esp_log_level_set("mcpwm", ESP_LOG_DEBUG)`
-   so those compiled-in calls actually fire at runtime.
+Fix in `reconfigure_for_band`: software-sync the timer to phase=0
+right after `mcpwm_new_timer` returns. The reload-to-zero is itself a
+TEZ event, which forces shadow→active flush for both prescale and
+period atomically:
 
-Removing **either** piece reproduces the bug. Suspected cause: the
-microseconds spent inside the driver's `LOGD` argument formatting let
-some MCPWM register write settle between writes; without that delay,
-the next `read` sees stale state. Root cause is **not isolated** —
-treated as a known-good workaround for now. Full bisect would need a
-minimal repro project (no Wi-Fi/USB) and probably register-level traces.
+```c
+MCPWM0.timer[0].timer_sync.timer_phase = 0;
+MCPWM0.timer[0].timer_sync.timer_phase_direction = 0;
+MCPWM0.timer[0].timer_sync.timer_synci_en = 1;
+MCPWM0.timer[0].timer_sync.timer_sync_sw =
+    ~MCPWM0.timer[0].timer_sync.timer_sync_sw;   // auto-clear toggle
+MCPWM0.timer[0].timer_sync.timer_synci_en = 0;
+```
 
-**If you remove either the Kconfig or the runtime call, scope GPIO4
-after a `pwm 100 50` first** to confirm you didn't bring the bug back.
+Uses private register access (`hal/mcpwm_ll.h` + `soc/mcpwm_struct.h`
+in `pwm_gen` component's `PRIV_REQUIRES`). Keep this — verified on
+scope across hundreds of LO↔HI crosses under Wi-Fi load with no
+miscounts. Earlier "fix" attempts that did NOT work (do not
+reintroduce):
+
+- Forcing `LOG_MAXIMUM_LEVEL_DEBUG=y` + runtime
+  `esp_log_level_set("mcpwm", DEBUG)` — narrowed the race via
+  LOGD-formatting delay, never closed it under load.
+- `STOP_EMPTY → esp_rom_delay_us(N) → START_NO_STOP` "double-tap"
+  after `mcpwm_timer_enable` — orthogonal to the shadow-flush issue.
+- Halting the OLD counter via `mcpwm_ll_timer_set_count_mode(PAUSE)`
+  before `mcpwm_del_timer` — stale-active-register survives
+  teardown, so this changes nothing.
 
 **Same-band updates** (e.g. 500 Hz → 600 Hz) stay glitch-free via TEZ.
 **Band-crossing updates** (152 Hz ↔ 153 Hz) go through

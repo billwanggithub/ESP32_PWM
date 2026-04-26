@@ -29,23 +29,6 @@ CONFIG_FREERTOS_UNICORE=n
 
 # Logging (UART0 console via USB1 / CH343P)
 CONFIG_LOG_DEFAULT_LEVEL_INFO=y
-# CONFIG_LOG_MAXIMUM_LEVEL is a choice group — list all members explicitly so
-# this override survives a stale sdkconfig (CLAUDE.md sdkconfig trap).
-#
-# **Workaround for v6.0 MCPWM band-cross bug**: with the choice at default
-# (LOG_MAXIMUM_EQUALS_DEFAULT, max=INFO), `pwm_gen` produces a 16× too-high
-# output frequency on the FIRST cross from HI band → LO band (e.g. asking
-# for 100 Hz outputs 1.6 kHz). Bumping max to DEBUG and the runtime
-# `esp_log_level_set("mcpwm", ESP_LOG_DEBUG)` in pwm_gen_init() together
-# make the bug disappear, even though neither call should have hardware
-# effect. Suspected cause: extra microseconds inside the driver's LOGD
-# argument formatting let some MCPWM register write settle before the next
-# read, but root cause is not isolated. Removing this Kconfig OR removing
-# the esp_log_level_set call brings the bug back. Cost: ~few KB of LOGD
-# format strings linked in. See HANDOFF.md "Open issues" for follow-up.
-CONFIG_LOG_MAXIMUM_EQUALS_DEFAULT=n
-CONFIG_LOG_MAXIMUM_LEVEL_DEBUG=y
-CONFIG_LOG_MAXIMUM_LEVEL_VERBOSE=n
 
 # Compiler
 CONFIG_COMPILER_OPTIMIZATION_PERF=y

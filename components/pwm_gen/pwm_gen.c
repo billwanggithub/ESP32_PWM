@@ -9,6 +9,8 @@
 #include "esp_timer.h"
 #include "freertos/FreeRTOS.h"
 #include "freertos/task.h"
+#include "hal/mcpwm_ll.h"
+#include "soc/mcpwm_struct.h"
 
 // MCPWM 的 timer counter 是 16-bit（MCPWM_LL_MAX_COUNT_VALUE = 0x10000），所以
 // period_ticks 必須 ∈ [2, 65535]。一個固定 resolution_hz 覆蓋不了 10 Hz ~ 1 MHz，
@@ -161,17 +163,6 @@ esp_err_t pwm_gen_init(const pwm_gen_config_t *cfg)
 
     s_pwm.initialised = true;
 
-    // **v6.0 MCPWM band-cross workaround** — see sdkconfig.defaults
-    // CONFIG_LOG_MAXIMUM_LEVEL_DEBUG comment for full context.
-    // tl;dr: without BOTH `LOG_MAXIMUM_LEVEL_DEBUG=y` (compile-time) AND
-    // this runtime `esp_log_level_set` call, the first HI→LO band cross
-    // produces 16× the requested frequency (period correct, prescale
-    // not actually latched). Removing either piece reproduces the bug.
-    // Suspected: driver LOGD argument formatting introduces enough delay
-    // to let an MCPWM register write settle. Root cause not isolated;
-    // tracked in HANDOFF.md. Do NOT remove without confirming on scope.
-    esp_log_level_set("mcpwm", ESP_LOG_DEBUG);
-
     ESP_LOGI(TAG, "init ok: pwm_gpio=%d trigger_gpio=%d freq=%lu duty=%.1f%% res=%lu",
              s_pwm.pwm_gpio, s_pwm.trigger_gpio,
              (unsigned long)s_pwm.freq_hz, s_pwm.duty_pct,
@@ -227,6 +218,35 @@ static esp_err_t reconfigure_for_band(const pwm_band_t *band,
         return err;
     }
 
+    // ESP32-S3 MCPWM `timer_period` and `timer_prescale` live in a shadow
+    // register; even with `upmethod=0` (immediate), the active register
+    // flush is intermittent on a band-cross teardown→recreate. Direct
+    // hardware verification: right after `mcpwm_new_timer` returns, reading
+    // `timer_status.timer_value` shows the counter still at the OLD peak
+    // (e.g. ~25000) while the shadow shows the NEW peak (e.g. 2000) —
+    // shadow ≠ active. The symptom on the pin is `old_resolution /
+    // new_shadow_peak`, e.g. a 1 kHz request outputs 62.5 Hz
+    // (= 625 kHz / 10000) and a 100 Hz request outputs 1.6 kHz
+    // (= 10 MHz / 6250).
+    //
+    // Force flush by software-syncing the timer to phase=0: that reloads
+    // the counter to 0, which is itself a TEZ event, which flushes
+    // shadow→active for both prescale and period atomically. Sync input
+    // must be enabled for the soft trigger to take effect;
+    // `mcpwm_hal_timer_reset` (called inside `mcpwm_new_timer` in v6.0)
+    // had explicitly disabled it, so we re-enable, fire, then disable.
+    //
+    // Replaces an earlier LOGD-induced-delay workaround that used to sit
+    // in `pwm_gen_init` (set "mcpwm" to ESP_LOG_DEBUG) plus a
+    // STOP_EMPTY→START_NO_STOP dance after `mcpwm_timer_enable`. Both
+    // narrowed the race but never closed it under Wi-Fi RX / telemetry
+    // load. This soft-sync is the actual fix.
+    MCPWM0.timer[0].timer_sync.timer_phase = 0;
+    MCPWM0.timer[0].timer_sync.timer_phase_direction = 0;
+    MCPWM0.timer[0].timer_sync.timer_synci_en = 1;
+    MCPWM0.timer[0].timer_sync.timer_sync_sw = ~MCPWM0.timer[0].timer_sync.timer_sync_sw;
+    MCPWM0.timer[0].timer_sync.timer_synci_en = 0;
+
     err = mcpwm_operator_connect_timer(s_pwm.oper, s_pwm.timer);
     if (err != ESP_OK) { ESP_LOGE(TAG, "oper connect: %s", esp_err_to_name(err)); return err; }
 
@@ -235,15 +255,6 @@ static esp_err_t reconfigure_for_band(const pwm_band_t *band,
 
     err = mcpwm_timer_enable(s_pwm.timer);
     if (err != ESP_OK) { ESP_LOGE(TAG, "timer enable: %s", esp_err_to_name(err)); return err; }
-
-    // ESP32-S3 MCPWM hardware quirk: the timer_prescale register only takes
-    // effect on a genuine stop→start edge. Since the old timer occupied this
-    // same hardware slot and left timer_start=START_NO_STOP (mode=2) in the
-    // register, writing START_NO_STOP again does not re-latch the prescale.
-    // Explicitly issue STOP_EMPTY (0) first, then START_NO_STOP (2), so the
-    // hardware sees the 0→2 transition and loads the new prescale.
-    err = mcpwm_timer_start_stop(s_pwm.timer, MCPWM_TIMER_STOP_EMPTY);
-    if (err != ESP_OK) { ESP_LOGE(TAG, "timer stop (latch): %s", esp_err_to_name(err)); return err; }
 
     err = mcpwm_timer_start_stop(s_pwm.timer, MCPWM_TIMER_START_NO_STOP);
     if (err != ESP_OK) { ESP_LOGE(TAG, "timer start: %s", esp_err_to_name(err)); return err; }

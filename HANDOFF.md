@@ -1,9 +1,54 @@
 # Hand-off — Fan-TestKit firmware (ESP32-S3 PWM + RPM)
 
-Date: 2026-04-26 (PSU multi-family driver landed in firmware)
+Date: 2026-04-26 (PWM band-cross root-caused; PSU multi-family landed)
 Branch: `feature/psu-modbus-rtu` (HEAD `53a1936`, ahead of `main` by 16 commits)
 Working dir: `D:\github\Fan-TestKit-ESP32`
 IDF: `C:\esp\v6.0\esp-idf`
+
+## 2026-04-26 — PWM band-cross bug root-caused, real fix landed
+
+The "v6.0 MCPWM band-cross workaround" tracked in the **OPEN ISSUE**
+section below is now resolved. Symptom recap: after a HI→LO or LO→HI
+band cross in `pwm_gen.c`, the output frequency was sometimes wrong by
+exactly 16× (e.g. 1 kHz request outputs 62.5 Hz, or 100 Hz outputs
+1.6 kHz). The previous "workaround" (forcing `LOG_MAXIMUM_LEVEL_DEBUG`
+plus a runtime `esp_log_level_set("mcpwm", ESP_LOG_DEBUG)`) narrowed
+the race but never closed it; the bug intermittently fired under
+Wi-Fi RX or telemetry load.
+
+**Root cause** (confirmed via `timer_status` register diagnostic):
+ESP32-S3 MCPWM `timer_period` and `timer_prescale` live in shadow
+registers. Even with `timer_period_upmethod=0` ("immediate") set by
+the driver, the active-register flush is not actually atomic with the
+shadow write — observed directly by reading `timer_status.timer_value`
+right after `mcpwm_new_timer` returns and seeing the counter still at
+the OLD peak (e.g. ~25000) while the shadow had the NEW peak (e.g.
+2000). Counter increment rate measured at 100 µs intervals confirmed
+the active prescale was also stale (650 kHz vs configured 10 MHz).
+
+**Fix** (in `reconfigure_for_band`, `components/pwm_gen/pwm_gen.c`):
+right after `mcpwm_new_timer` returns, software-sync the timer to
+phase=0. The reload-to-zero is itself a TEZ event, which forces a
+shadow→active flush for both prescale and period atomically. Sync
+input is briefly enabled, fired via the auto-clear `timer_sync_sw`
+toggle, then disabled again. Uses private `MCPWM0` register access
+(`hal/mcpwm_ll.h` + `soc/mcpwm_struct.h` added to component
+`PRIV_REQUIRES`). Verified on scope across hundreds of LO↔HI crosses
+under Wi-Fi load — no 62.5 Hz outliers.
+
+**Removed (no longer needed)**:
+
+- `CONFIG_LOG_MAXIMUM_LEVEL_DEBUG=y` and the choice-group siblings in
+  `sdkconfig.defaults` (the LOGD-induced delay was a guess, not the
+  fix).
+- `esp_log_level_set("mcpwm", ESP_LOG_DEBUG)` in `pwm_gen_init`.
+- The `STOP_EMPTY → START_NO_STOP` "double-tap" in
+  `reconfigure_for_band` — once the soft-sync flushes shadow→active,
+  the prescale-latch concern that motivated it is also resolved.
+
+The 🟡 OPEN ISSUE section further down (header level "v6.0 MCPWM
+band-cross workaround not understood") describes the workaround era;
+keep it for archaeology but the bug is closed.
 
 ## 2026-04-26 — PSU multi-family driver (riden / xy_sk120 / wz5005)
 
