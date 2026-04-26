@@ -330,8 +330,8 @@ uint32_t pwm_gen_load_saved_freq(uint32_t fallback_hz)
 
 esp_err_t pwm_gen_save_current_freq_to_nvs(void)
 {
-    uint32_t f; float d;
-    pwm_gen_get(&f, &d);
+    uint32_t f;
+    pwm_gen_get(&f, NULL);
     if (f < PWM_GEN_FREQ_MIN_HZ || f > PWM_GEN_FREQ_MAX_HZ) return ESP_ERR_INVALID_STATE;
     nvs_handle_t h;
     esp_err_t e = nvs_open(PWM_NVS_NAMESPACE, NVS_READWRITE, &h);
