@@ -5,6 +5,28 @@ Branch: `feature/psu-modbus-rtu` (HEAD `53a1936`, ahead of `main` by 16 commits)
 Working dir: `D:\github\Fan-TestKit-ESP32`
 IDF: `C:\esp\v6.0\esp-idf`
 
+## 2026-04-26 — NVS-persisted runtime settings
+
+End-to-end plan: `docs/superpowers/plans/2026-04-26-nvs-persisted-settings.md`.
+
+What's new:
+
+- Three NVS namespaces + new `components/ui_settings/` component
+  (see CLAUDE.md "NVS-persisted runtime tunables" section).
+- HID descriptor grew 83 → 93 bytes for new report id `0x06`.
+- CDC ops `0x50..0x53` for the four save commands.
+- WS status frame now includes `"ui":{"duty_step":..,"freq_step":..}`
+  at 20 Hz; dashboard's localStorage step persistence is gone.
+- PWM freq survives reboot; duty always boots to 0.
+
+What was deliberately not done:
+
+- `psu_driver` not migrated to the new NVS error-propagation policy.
+- HID save reports do NOT round-trip an "ok" status (fire-and-forget;
+  consistent with existing usb_protocol contract).
+- Manual reflash + browser test required for end-to-end Phase 3
+  acceptance — software-only verification was build-clean only.
+
 ## 2026-04-26 — Dashboard RPM chart auto-scales both ways
 
 The RPM live chart (`components/net_dashboard/web/app.js`) used to ratchet

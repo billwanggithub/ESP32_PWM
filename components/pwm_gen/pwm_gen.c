@@ -115,7 +115,12 @@ esp_err_t pwm_gen_init(const pwm_gen_config_t *cfg)
     s_pwm.pwm_gpio     = cfg->pwm_gpio;
     s_pwm.trigger_gpio = cfg->trigger_gpio;
 
-    // Start at a safe known state: 10 kHz, 0% duty. Falls into the HI band.
+    // Initial timer setup at HI-band 10 kHz is a placeholder. The real boot
+    // freq is delivered shortly after via the queued CTRL_CMD_SET_PWM in
+    // app_main, which may trigger a HI↔LO band reconfigure if the saved
+    // NVS freq lives in the LO band (10..152 Hz). This produces a brief
+    // (~tens of µs) output discontinuity right at boot — acceptable since
+    // duty is 0 at that moment so no fan is actually running.
     const uint32_t init_freq = 10000;
     const pwm_band_t *band = pick_band(init_freq);
     s_pwm.resolution_hz = band->resolution_hz;

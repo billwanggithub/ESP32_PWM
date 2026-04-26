@@ -506,6 +506,49 @@ Link health: 5 consecutive timeouts/CRC failures flips `link_ok` to
 false; first success flips it back. Only state transitions log — avoids
 spam when the cable is unplugged.
 
+## NVS-persisted runtime tunables
+
+Three additional namespaces beyond the existing `psu_driver` namespace
+hold user-tunable state that should survive reboot:
+
+- `rpm_cap`: keys `pole` (u8), `mavg` (u16), `timeout_us` (u32) — set
+  via `rpm_cap_save_params_to_nvs()` / `rpm_cap_save_timeout_to_nvs()`.
+- `pwm_gen`: key `freq_hz` (u32) — set via
+  `pwm_gen_save_current_freq_to_nvs()`. **Duty is deliberately NOT
+  persisted** — boot always starts at duty=0 regardless of saved
+  state. This is a hard safety invariant: a fan reboot under power
+  must not silently restart at the previous duty.
+- `ui_settings`: keys `duty_step` (blob: float, 4 B), `freq_step` (u16)
+  — set via `ui_settings_save_steps()`. Owned by the
+  `components/ui_settings/` component, which is also referenced by
+  `net_dashboard` so the WS status frame can serve current step values
+  to all browser clients (no per-browser localStorage; the device is
+  the source of truth).
+
+All Save commands flow through `control_task` (CTRL_CMD_SAVE_RPM_PARAMS /
+SAVE_RPM_TIMEOUT / SAVE_PWM_FREQ / SAVE_UI_STEPS) and are reachable via
+all four transports:
+
+- WebSocket: `{"type":"save_rpm_params"}`, `{"type":"save_rpm_timeout"}`,
+  `{"type":"save_pwm_freq"}`, `{"type":"save_ui_steps","duty_step":...,
+  "freq_step":...}`
+- HID: report id `0x06` (USB_HID_REPORT_SETTINGS_SAVE) with op codes
+  `0x01..0x04` covering all four settings in a single 8-byte payload.
+  Adding this report grew the HID descriptor from 83 → 93 bytes; the
+  `_Static_assert(sizeof(usb_hid_report_descriptor) == 93)` and
+  `HID_REPORT_DESC_SIZE` macro must stay in lockstep.
+- CDC SLIP: ops `0x50..0x53`. `save_pwm_freq`'s u32 payload is
+  advisory; the device authoritatively saves its live freq via
+  `pwm_gen_get` to avoid transport-level race conditions.
+- CLI: `save_rpm_params`, `save_rpm_timeout`, `save_pwm_freq`,
+  `save_ui_steps <duty> <freq>`.
+
+NVS save error handling policy: every save fn propagates both
+`nvs_set_*` and `nvs_commit` errors via the
+`(es == ESP_OK) ? nvs_commit(h) : ESP_OK` short-circuit. Pre-existing
+`psu_driver` retains the older silent-commit pattern for now;
+acknowledged tech debt.
+
 ## Interaction & communication preferences
 
 All responses and commit-message bodies: **晶晶體** (Traditional Chinese +

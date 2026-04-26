@@ -132,6 +132,11 @@ typedef struct __attribute__((packed)) {
     uint8_t  pad1[2];
 } usb_hid_settings_save_steps_t;
 
+_Static_assert(sizeof(usb_hid_settings_save_t) == 8,
+               "usb_hid_settings_save_t must match HID report 0x06 size");
+_Static_assert(sizeof(usb_hid_settings_save_steps_t) == 8,
+               "usb_hid_settings_save_steps_t must match HID report 0x06 size");
+
 // ---- PSU power supply (CDC SLIP) ------------------------------------------
 
 #define USB_CDC_OP_PSU_SET_VOLTAGE    0x40   // float LE (4 B)

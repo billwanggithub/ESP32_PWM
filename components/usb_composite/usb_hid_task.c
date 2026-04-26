@@ -158,15 +158,14 @@ void tud_hid_set_report_cb(uint8_t instance, uint8_t report_id,
             control_task_post(&c, 0);
         } break;
         case USB_HID_SAVE_OP_UI_STEPS: {
-            // payload (post report-id strip): [0]=op, [1]=pad0, [2..3]=duty_step_x100, [4..5]=freq_step
-            uint16_t duty_x100, freq_step;
-            memcpy(&duty_x100, &buffer[2], 2);
-            memcpy(&freq_step, &buffer[4], 2);
+            usb_hid_settings_save_steps_t p;
+            if (bufsize < sizeof(p)) break;
+            memcpy(&p, buffer, sizeof(p));
             ctrl_cmd_t c = {
                 .kind = CTRL_CMD_SAVE_UI_STEPS,
                 .save_ui_steps = {
-                    .duty_step = (float)duty_x100 / 100.0f,
-                    .freq_step = freq_step,
+                    .duty_step = (float)p.duty_step_x100 / 100.0f,
+                    .freq_step = p.freq_step,
                 },
             };
             control_task_post(&c, 0);
