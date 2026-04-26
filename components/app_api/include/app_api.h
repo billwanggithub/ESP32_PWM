@@ -33,6 +33,9 @@ typedef enum {
     CTRL_CMD_PSU_SET_CURRENT,
     CTRL_CMD_PSU_SET_OUTPUT,
     CTRL_CMD_PSU_SET_SLAVE,
+    CTRL_CMD_ANNOUNCER_SET,
+    CTRL_CMD_ANNOUNCER_TEST,
+    CTRL_CMD_ANNOUNCER_ENABLE,
 } ctrl_cmd_kind_t;
 
 typedef struct {
@@ -51,6 +54,13 @@ typedef struct {
         struct { uint8_t  on;    }                     psu_set_output;
         struct { uint8_t  addr;  }                     psu_set_slave;
         struct { float duty_step; uint16_t freq_step; }   save_ui_steps;
+        struct { uint8_t enable; }                    announcer_enable;
+        struct {
+            uint8_t enable;
+            uint8_t priority;
+            char    topic[65];
+            char    server[97];
+        }                                              announcer_set;
     };
 } ctrl_cmd_t;
 

@@ -154,6 +154,30 @@ _Static_assert(sizeof(usb_hid_settings_save_steps_t) == 8,
 #define USB_CDC_OP_SAVE_RPM_TIMEOUT   0x52   // payload: empty
 #define USB_CDC_OP_SAVE_UI_STEPS      0x53   // payload: float duty_step + u16 freq_step
 
+// ---- IP Announcer (HID) ----------------------------------------------------
+
+#define USB_HID_REPORT_ANNOUNCER       0x07   // OUT, 8 B (op + payload)
+
+#define USB_HID_ANN_OP_ENABLE_TOGGLE   0x01   // payload byte 1: 0|1
+#define USB_HID_ANN_OP_TEST_PUSH       0x02   // no payload
+
+typedef struct __attribute__((packed)) {
+    uint8_t  op;          // 0x01 enable, 0x02 test
+    uint8_t  enable;      // valid only for 0x01
+    uint8_t  pad[6];
+} usb_hid_announcer_t;
+
+_Static_assert(sizeof(usb_hid_announcer_t) == 8,
+               "usb_hid_announcer_t must match HID report 0x07 size");
+
+// ---- IP Announcer (CDC SLIP) ------------------------------------------------
+
+#define USB_CDC_OP_ANNOUNCER_SET       0x60   // H→D u8 enable, u8 priority,
+                                              //     str topic\0 str server\0
+#define USB_CDC_OP_ANNOUNCER_TEST      0x61   // H→D empty
+#define USB_CDC_OP_ANNOUNCER_TELEMETRY 0x62   // D→H 5 Hz status mirror
+#define USB_CDC_OP_ANNOUNCER_RESULT    0x63   // D→H push final outcome event
+
 #ifdef __cplusplus
 }
 #endif
