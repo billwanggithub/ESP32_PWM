@@ -494,11 +494,13 @@ void app_main(void)
     // same boot default — so a duty-only command from the dashboard before any
     // freq change carries a real freq, not zero.
     {
+        uint32_t boot_freq = pwm_gen_load_saved_freq(10000u);
         ctrl_cmd_t boot_pwm = {
             .kind    = CTRL_CMD_SET_PWM,
-            .set_pwm = { .freq_hz = 10000u, .duty_pct = 0.0f },
+            .set_pwm = { .freq_hz = boot_freq, .duty_pct = 0.0f },
         };
         control_task_post(&boot_pwm, pdMS_TO_TICKS(100));
+        ESP_LOGI(TAG, "boot pwm: freq=%lu duty=0 (from NVS or fallback)", (unsigned long)boot_freq);
     }
 
     // Boot the power switch OFF through the queue so the published state and
