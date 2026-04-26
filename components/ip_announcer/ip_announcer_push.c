@@ -25,6 +25,8 @@ typedef struct {
 static QueueHandle_t s_push_q;
 static TaskHandle_t  s_push_task;
 
+// Mirror of announcerTopicLooksSafe() in net_dashboard/web/app.js — keep
+// the rules in sync (len < 16, CHANGE-ME-*, fan-testkit-CHANGE*).
 static bool topic_is_safe(const char *topic)
 {
     if (!topic) return false;

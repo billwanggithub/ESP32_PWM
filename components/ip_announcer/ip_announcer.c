@@ -64,8 +64,8 @@ static esp_err_t persist_settings_unlocked(const ip_announcer_settings_t *s)
     return ec;
 }
 
-void ip_announcer_on_ip_event(void *arg, esp_event_base_t base,
-                              int32_t id, void *data)
+static void ip_announcer_on_ip_event(void *arg, esp_event_base_t base,
+                                     int32_t id, void *data)
 {
     (void)arg;
     if (base != IP_EVENT || id != IP_EVENT_STA_GOT_IP) return;
@@ -103,6 +103,11 @@ esp_err_t ip_announcer_init(void)
     memset(&s_settings,  0, sizeof(s_settings));
     memset(&s_telemetry, 0, sizeof(s_telemetry));
     s_settings.priority  = DEFAULT_PRIORITY;
+    // status starts as NEVER on every boot — last_pushed_ip is loaded
+    // from NVS for cross-boot dedupe within a single power-on session,
+    // but a cold boot deliberately re-announces (status != OK so the
+    // IP_EVENT handler will re-push even if the IP is unchanged).
+    // This is the desired UX: every reboot pings the user "I'm back".
     s_telemetry.status   = IP_ANN_STATUS_NEVER;
 
     nvs_handle_t h;
@@ -171,8 +176,6 @@ esp_err_t ip_announcer_init(void)
         return e;
     }
 
-    extern void ip_announcer_on_ip_event(void *arg, esp_event_base_t base,
-                                         int32_t id, void *data);
     esp_err_t reg_e = esp_event_handler_register(IP_EVENT, IP_EVENT_STA_GOT_IP,
                                                  ip_announcer_on_ip_event, NULL);
     if (reg_e == ESP_ERR_INVALID_STATE) {

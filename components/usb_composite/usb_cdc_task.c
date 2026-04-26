@@ -242,6 +242,12 @@ static void handle_frame(const uint8_t *data, size_t len)
         size_t topic_n = strnlen(topic, plen - 2);
         if (topic_n + 2 + 1 >= plen) break;
         const char *server = topic + topic_n + 1;
+        size_t server_max  = plen - (topic_n + 3);  // bytes available after topic\0
+        size_t server_n    = strnlen(server, server_max);
+        if (server_n == server_max) {
+            // Missing trailing NUL — malformed frame, drop.
+            break;
+        }
 
         ctrl_cmd_t c = {
             .kind = CTRL_CMD_ANNOUNCER_SET,

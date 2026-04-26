@@ -231,6 +231,13 @@ static void handle_json(cJSON *root, int fd)
             ws_send_json_to(fd, "{\"type\":\"ack\",\"op\":\"set_announcer\",\"ok\":false}");
             return;
         }
+        // Mirror ip_announcer_set_settings validation: topic 8..64, server non-empty.
+        size_t topic_len  = strlen(tp->valuestring);
+        size_t server_len = strlen(sv->valuestring);
+        if (topic_len < 8 || topic_len > 64 || server_len == 0) {
+            ws_send_json_to(fd, "{\"type\":\"ack\",\"op\":\"set_announcer\",\"ok\":false}");
+            return;
+        }
         ctrl_cmd_t c = {
             .kind = CTRL_CMD_ANNOUNCER_SET,
             .announcer_set = {

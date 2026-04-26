@@ -99,7 +99,7 @@
       announcer_save: 'Save',
       announcer_random: '🎲 Random',
       announcer_status_never: 'Never pushed.',
-      announcer_status_ok: 'Pushed {ip} ({age})',
+      announcer_status_ok: 'Pushed {ip}',
       announcer_status_failed: 'Failed: {err}',
       announcer_status_disabled: 'Disabled.',
       announcer_subscribe_h: '📲 Subscribe on phone:',
@@ -201,7 +201,7 @@
       announcer_save: '儲存',
       announcer_random: '🎲 隨機',
       announcer_status_never: '尚未推送過。',
-      announcer_status_ok: '已推送 {ip} ({age})',
+      announcer_status_ok: '已推送 {ip}',
       announcer_status_failed: '失敗：{err}',
       announcer_status_disabled: '已停用。',
       announcer_subscribe_h: '📲 在手機上訂閱：',
@@ -303,7 +303,7 @@
       announcer_save: '保存',
       announcer_random: '🎲 随机',
       announcer_status_never: '尚未推送过。',
-      announcer_status_ok: '已推送 {ip} ({age})',
+      announcer_status_ok: '已推送 {ip}',
       announcer_status_failed: '失败：{err}',
       announcer_status_disabled: '已停用。',
       announcer_subscribe_h: '📲 在手机上订阅：',
@@ -1169,6 +1169,8 @@
   });
 
   // ---------- IP Announcer panel ----------
+  // Mirror of topic_is_safe() in components/ip_announcer/ip_announcer_push.c —
+  // keep the rules in sync (len < 16, CHANGE-ME-*, fan-testkit-CHANGE*).
   function announcerTopicLooksSafe(topic) {
     if (!topic) return false;
     if (topic.length < 16) return false;
@@ -1195,8 +1197,7 @@
     const statusEl = document.getElementById('announcer-status');
     if (a.status === 'ok') {
       statusEl.textContent = t('announcer_status_ok')
-        .replace('{ip}', a.last_pushed_ip || '?')
-        .replace('{age}', '');
+        .replace('{ip}', a.last_pushed_ip || '?');
       statusEl.style.color = 'green';
     } else if (a.status === 'failed') {
       statusEl.textContent = t('announcer_status_failed')
