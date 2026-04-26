@@ -91,6 +91,7 @@
       psu_family_lbl: 'Family',
       psu_reboot: 'Reboot',
       psu_family_pending: 'reboot to apply',
+      save: 'Save',
     },
     'zh-Hant': {
       app_title: 'Fan-TestKit 儀表板',
@@ -177,6 +178,7 @@
       psu_family_lbl: '型號',
       psu_reboot: '重新開機',
       psu_family_pending: '重開後生效',
+      save: '儲存',
     },
     'zh-Hans': {
       app_title: 'Fan-TestKit 仪表板',
@@ -263,6 +265,7 @@
       psu_family_lbl: '型号',
       psu_reboot: '重新开机',
       psu_family_pending: '重启后生效',
+      save: '保存',
     },
   };
 
@@ -384,7 +387,7 @@
   function makePanel(opts) {
     const {
       kind, axis, range, defaultValue, presetDefaults, presetStorageKey,
-      stepStorageKey, sliderToValue, valueToSlider, formatReadout,
+      sliderToValue, valueToSlider, formatReadout,
       onCommit, onValueChanged,
     } = opts;
 
@@ -417,31 +420,19 @@
     const PENDING_TIMEOUT_MS = 600;
     const PENDING_EPSILON = 0.05;  // duty=0.1% step, freq matches at integer
 
-    // Step input wiring — controls slider step only
-    function loadStep() {
-      try {
-        const raw = localStorage.getItem(stepStorageKey);
-        const n = parseFloat(raw);
-        if (!isFinite(n) || n <= 0) return;
-        stepInput.value = n;
-      } catch (e) { /* ignore */ }
-    }
-    function applyStepToSlider() {
-      const n = parseFloat(stepInput.value);
-      if (!isFinite(n) || n <= 0) return;
-      slider.step = String(n);
-    }
+    // Step input wiring — local-only: updates slider.step immediately so the
+    // user sees their typed value reflected. Persisting to device requires the
+    // explicit Save button (outside makePanel). Steps from the server arrive
+    // via applyStepFromServer() which writes stepInput.value + slider.step
+    // directly.
     stepInput.addEventListener('change', () => {
       const n = parseFloat(stepInput.value);
       if (!isFinite(n) || n <= 0) {
         stepInput.value = slider.step || 1;
         return;
       }
-      try { localStorage.setItem(stepStorageKey, String(n)); } catch (e) {}
-      applyStepToSlider();
+      slider.step = String(n);
     });
-    loadStep();
-    applyStepToSlider();
 
     function setLocal(value, { commit = false, fromDevice = false } = {}) {
       const v = clamp(value, range.min, range.max);
@@ -720,7 +711,6 @@
     defaultValue: 0,
     presetDefaults: [0, 10, 25, 50, 75, 100],
     presetStorageKey: 'fan-testkit:duty-presets',
-    stepStorageKey: 'fan-testkit:duty-step',
     sliderToValue: (s) => s,
     valueToSlider: (v) => Math.round(v),
     formatReadout: (v) => v.toFixed(1),
@@ -734,7 +724,6 @@
     defaultValue: 10000,
     presetDefaults: [25, 100, 1000, 5000, 25000, 100000],
     presetStorageKey: 'fan-testkit:freq-presets',
-    stepStorageKey: 'fan-testkit:freq-step',
     // log10 mapping: slider 100..600 → freq 10^1..10^6 = 10..1_000_000
     sliderToValue: (s) => {
       const f = Math.pow(10, s / 100);
@@ -1017,6 +1006,44 @@
     };
   })();
 
+  // ---------- Step sizes: server-driven apply + Save button ----------
+  // Step values arrive in the WS status frame as msg.ui.duty_step / freq_step.
+  // This function updates both inputs and the slider.step properties so the
+  // UI immediately reflects the device-persisted values after (re)connect.
+  function applyStepFromServer(uiBlock) {
+    if (!uiBlock) return;
+    if (typeof uiBlock.duty_step === 'number' && uiBlock.duty_step > 0) {
+      const dutyInput  = document.getElementById('duty-step');
+      const dutySlider = document.getElementById('duty-slider');
+      if (dutyInput)  dutyInput.value  = uiBlock.duty_step;
+      if (dutySlider) dutySlider.step  = String(uiBlock.duty_step);
+    }
+    if (typeof uiBlock.freq_step === 'number' && uiBlock.freq_step > 0) {
+      const freqInput  = document.getElementById('freq-step');
+      const freqSlider = document.getElementById('freq-slider');
+      if (freqInput)  freqInput.value  = uiBlock.freq_step;
+      if (freqSlider) freqSlider.step  = String(uiBlock.freq_step);
+    }
+  }
+
+  // Save button — commits both step inputs to NVS via save_ui_steps WS op.
+  (() => {
+    const btn       = document.getElementById('save-ui-steps-btn');
+    const statusEl  = document.getElementById('save-ui-steps-status');
+    if (!btn) return;
+    btn.addEventListener('click', () => {
+      const duty = parseFloat(document.getElementById('duty-step').value);
+      const freq = parseInt(document.getElementById('freq-step').value, 10);
+      if (!(duty > 0) || !(freq > 0)) {
+        if (statusEl) statusEl.textContent = 'invalid input';
+        return;
+      }
+      if (ws.readyState === WebSocket.OPEN) {
+        ws.send(JSON.stringify({ type: 'save_ui_steps', duty_step: duty, freq_step: freq }));
+      }
+    });
+  })();
+
   // ---------- WebSocket dispatch ----------
   ws.addEventListener('message', (ev) => {
     try {
@@ -1032,9 +1059,18 @@
         if (typeof msg.power === 'number') setPowerFromDevice(msg.power);
         if (typeof msg.pulse_width_ms === 'number') setPulseWidthFromDevice(msg.pulse_width_ms);
         if (msg.psu) psuPanel.setFromDevice(msg.psu);
-      } else if (msg.type === 'ack' && msg.op === 'factory_reset') {
-        const fs = document.getElementById('factory_reset_status');
-        if (fs) fs.textContent = t('factory_acked');
+        applyStepFromServer(msg.ui);
+      } else if (msg.type === 'ack') {
+        if (msg.op === 'factory_reset') {
+          const fs = document.getElementById('factory_reset_status');
+          if (fs) fs.textContent = t('factory_acked');
+        } else if (msg.op === 'save_ui_steps') {
+          const el = document.getElementById('save-ui-steps-status');
+          if (el) {
+            el.textContent = msg.ok ? 'Saved' : 'Failed';
+            setTimeout(() => { if (el) el.textContent = ''; }, 3000);
+          }
+        }
       }
     } catch (e) { /* ignore non-JSON / partial frames */ }
   });
