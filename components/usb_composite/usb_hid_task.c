@@ -141,6 +141,30 @@ void tud_hid_set_report_cb(uint8_t instance, uint8_t report_id,
         }
         if (ok) control_task_post(&cmd, 0);
     } break;
+    case USB_HID_REPORT_SETTINGS_SAVE: {
+        if (bufsize < 8) break;
+        uint8_t op = buffer[0];
+        switch (op) {
+        case USB_HID_SAVE_OP_PWM_FREQ: {
+            ctrl_cmd_t c = { .kind = CTRL_CMD_SAVE_PWM_FREQ };
+            control_task_post(&c, 0);
+        } break;
+        case USB_HID_SAVE_OP_RPM_PARAMS: {
+            ctrl_cmd_t c = { .kind = CTRL_CMD_SAVE_RPM_PARAMS };
+            control_task_post(&c, 0);
+        } break;
+        case USB_HID_SAVE_OP_RPM_TIMEOUT: {
+            ctrl_cmd_t c = { .kind = CTRL_CMD_SAVE_RPM_TIMEOUT };
+            control_task_post(&c, 0);
+        } break;
+        case USB_HID_SAVE_OP_UI_STEPS: {
+            // wired in Phase 3 task 3.4
+        } break;
+        default:
+            ESP_LOGW(TAG, "unknown settings_save op 0x%02x", op);
+            break;
+        }
+    } break;
     default:
         ESP_LOGW(TAG, "unknown OUT report id 0x%02x", report_id);
         break;

@@ -108,6 +108,30 @@ typedef struct __attribute__((packed)) {
 
 #define USB_HID_PSU_SLAVE_MAGIC       0xA5
 
+// ---- Settings save (HID) ---------------------------------------------------
+
+#define USB_HID_REPORT_SETTINGS_SAVE  0x06   // OUT, 8 B (op + payload)
+
+#define USB_HID_SAVE_OP_PWM_FREQ      0x01   // payload: u32 freq_hz (advisory; device uses live freq)
+#define USB_HID_SAVE_OP_RPM_PARAMS    0x02   // payload: empty
+#define USB_HID_SAVE_OP_RPM_TIMEOUT   0x03   // payload: empty
+#define USB_HID_SAVE_OP_UI_STEPS      0x04   // payload: u16 duty_step_x100, u16 freq_step
+
+typedef struct __attribute__((packed)) {
+    uint8_t  op;
+    uint8_t  pad0;
+    uint32_t u32_payload;        // freq_hz for op 0x01
+    uint8_t  pad1[2];
+} usb_hid_settings_save_t;
+
+typedef struct __attribute__((packed)) {
+    uint8_t  op;
+    uint8_t  pad0;
+    uint16_t duty_step_x100;     // 100 = 1.0%, 50 = 0.5%, etc.
+    uint16_t freq_step;
+    uint8_t  pad1[2];
+} usb_hid_settings_save_steps_t;
+
 // ---- PSU power supply (CDC SLIP) ------------------------------------------
 
 #define USB_CDC_OP_PSU_SET_VOLTAGE    0x40   // float LE (4 B)
