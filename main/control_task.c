@@ -63,6 +63,14 @@ static void control_task(void *arg)
             ESP_LOGI(TAG, "rpm timeout: %lu us",
                      (unsigned long)cmd.set_rpm_timeout.timeout_us);
             break;
+        case CTRL_CMD_SAVE_RPM_PARAMS: {
+            esp_err_t e = rpm_cap_save_params_to_nvs();
+            if (e != ESP_OK) ESP_LOGW(TAG, "save_rpm_params failed: %s", esp_err_to_name(e));
+        } break;
+        case CTRL_CMD_SAVE_RPM_TIMEOUT: {
+            esp_err_t e = rpm_cap_save_timeout_to_nvs();
+            if (e != ESP_OK) ESP_LOGW(TAG, "save_rpm_timeout failed: %s", esp_err_to_name(e));
+        } break;
         case CTRL_CMD_GPIO_SET_MODE: {
             esp_err_t e = gpio_io_set_mode(cmd.gpio_set_mode.idx,
                                            (gpio_io_mode_t)cmd.gpio_set_mode.mode);
