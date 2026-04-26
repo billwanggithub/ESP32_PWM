@@ -1,9 +1,40 @@
 # Hand-off — Fan-TestKit firmware (ESP32-S3 PWM + RPM)
 
-Date: 2026-04-26 (PWM band-cross root-caused; PSU multi-family landed)
+Date: 2026-04-26 (RPM chart auto-scale; PWM band-cross root-caused; PSU multi-family landed)
 Branch: `feature/psu-modbus-rtu` (HEAD `53a1936`, ahead of `main` by 16 commits)
 Working dir: `D:\github\Fan-TestKit-ESP32`
 IDF: `C:\esp\v6.0\esp-idf`
+
+## 2026-04-26 — Dashboard RPM chart auto-scales both ways
+
+The RPM live chart (`components/net_dashboard/web/app.js`) used to ratchet
+its Y-axis up only — once the trace had visited e.g. 8000 RPM, the axis
+stayed at 8000 forever and subsequent low-RPM traces hugged the bottom of
+the chart unreadably. Initial axis was 2000, step 500.
+
+New behaviour: every `drawChart` call recomputes `yAxisMax` from the
+visible window's max RPM (`rpmHistory` is already pruned to the rolling
+15 s window):
+
+```text
+target = max(MIN_AXIS, ceil(visibleMax × 1.1 / STEP) × STEP)
+```
+
+with `Y_AXIS_MIN = 500`, `Y_AXIS_STEP = 500`, `Y_AXIS_HEADROOM = 1.1`.
+Axis grows AND shrinks as old high samples scroll off the right edge.
+500-RPM floor prevents the axis collapsing to a 1-RPM noise band when
+the fan is stopped; 10 % headroom keeps brief overshoots from clipping.
+
+The grow-only `bumpYAxisIfNeeded(rpm)` function is gone — its job is now
+a special case of the new `autoScaleYAxis()`, called from inside
+`drawChart` rather than from `setRpmFromDevice`. Tick-label DOM update
+(`#y-ticks` 5 spans: max / 75% / 50% / 25% / 0) extracted into
+`updateYTicks()` and only fires when `yAxisMax` actually changes — no
+DOM thrash at the 20 Hz telemetry rate.
+
+Verified manually in browser: drove fan up to ~6000 RPM (axis grew to
+7000), dropped to ~1000 RPM and waited 15 s (axis shrank to 1500), fan
+stopped (axis settled at the 500 floor).
 
 ## 2026-04-26 — PWM band-cross bug root-caused, real fix landed
 

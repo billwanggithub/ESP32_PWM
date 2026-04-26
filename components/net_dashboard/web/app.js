@@ -594,20 +594,30 @@
 
   const rpmHistory = [];           // entries: {t, rpm}
   const RPM_WINDOW_MS = 15_000;
-  let yAxisMax = 2000;
+  const Y_AXIS_MIN = 500;
+  const Y_AXIS_STEP = 500;
+  const Y_AXIS_HEADROOM = 1.1;
+  let yAxisMax = Y_AXIS_MIN;
   let chartSized = false;
 
-  function bumpYAxisIfNeeded(rpm) {
-    if (rpm <= yAxisMax) return;
-    const next = Math.ceil(rpm / 500) * 500;
-    if (next === yAxisMax) return;
-    yAxisMax = next;
-    // Update visible Y-axis tick labels (5 ticks: max, 3/4, 1/2, 1/4, 0)
+  function updateYTicks() {
     const yTicks = document.getElementById('y-ticks');
-    if (yTicks) {
-      const spans = yTicks.querySelectorAll('span');
-      const labels = [yAxisMax, yAxisMax * 0.75, yAxisMax * 0.5, yAxisMax * 0.25, 0];
-      labels.forEach((v, i) => { if (spans[i]) spans[i].textContent = String(Math.round(v)); });
+    if (!yTicks) return;
+    const spans = yTicks.querySelectorAll('span');
+    const labels = [yAxisMax, yAxisMax * 0.75, yAxisMax * 0.5, yAxisMax * 0.25, 0];
+    labels.forEach((v, i) => { if (spans[i]) spans[i].textContent = String(Math.round(v)); });
+  }
+
+  function autoScaleYAxis() {
+    let visibleMax = 0;
+    for (const pt of rpmHistory) if (pt.rpm > visibleMax) visibleMax = pt.rpm;
+    const target = Math.max(
+      Y_AXIS_MIN,
+      Math.ceil((visibleMax * Y_AXIS_HEADROOM) / Y_AXIS_STEP) * Y_AXIS_STEP,
+    );
+    if (target !== yAxisMax) {
+      yAxisMax = target;
+      updateYTicks();
     }
   }
 
@@ -623,6 +633,7 @@
   function drawChart() {
     if (!rpmChartExp.open) return;
     if (!chartSized && !ensureChartSize()) return;
+    autoScaleYAxis();
     const w = canvas.width, h = canvas.height;
     const dpr = window.devicePixelRatio || 1;
     ctx.clearRect(0, 0, w, h);
@@ -668,7 +679,6 @@
     if (!rpmLive.checked) return;
     rpmHistory.push({ t: performance.now(), rpm: Math.max(0, rpm) });
     pruneHistory();
-    bumpYAxisIfNeeded(rpm);
     drawChart();
   }
 
