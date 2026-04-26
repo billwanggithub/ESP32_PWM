@@ -4,8 +4,10 @@
 #include <string.h>
 #include <stdatomic.h>
 
+#include "esp_event.h"
 #include "esp_log.h"
 #include "esp_netif.h"
+#include "esp_netif_ip_addr.h"
 #include "esp_random.h"
 #include "esp_timer.h"
 #include "freertos/FreeRTOS.h"
@@ -60,6 +62,37 @@ static esp_err_t persist_settings_unlocked(const ip_announcer_settings_t *s)
     if (e3 != ESP_OK) return e3;
     if (e4 != ESP_OK) return e4;
     return ec;
+}
+
+void ip_announcer_on_ip_event(void *arg, esp_event_base_t base,
+                              int32_t id, void *data)
+{
+    (void)arg;
+    if (base != IP_EVENT || id != IP_EVENT_STA_GOT_IP) return;
+
+    ip_event_got_ip_t *evt = (ip_event_got_ip_t *)data;
+    char ip[16];
+    snprintf(ip, sizeof(ip), IPSTR, IP2STR(&evt->ip_info.ip));
+
+    xSemaphoreTake(s_lock, portMAX_DELAY);
+    bool enable = s_settings.enable;
+    bool same   = (strcmp(ip, s_telemetry.last_pushed_ip) == 0)
+                  && (s_telemetry.status == IP_ANN_STATUS_OK);
+    xSemaphoreGive(s_lock);
+
+    if (!enable) {
+        ESP_LOGI(TAG, "IP %s — push disabled", ip);
+        return;
+    }
+    if (same) {
+        ESP_LOGI(TAG, "IP %s — already pushed; skipping (dedupe)", ip);
+        return;
+    }
+    ESP_LOGI(TAG, "IP %s — enqueueing push", ip);
+    esp_err_t e = ip_announcer_priv_enqueue_push(ip);
+    if (e != ESP_OK) {
+        ESP_LOGW(TAG, "enqueue failed: %s", esp_err_to_name(e));
+    }
 }
 
 esp_err_t ip_announcer_init(void)
@@ -136,6 +169,20 @@ esp_err_t ip_announcer_init(void)
     if (e != ESP_OK) {
         ESP_LOGE(TAG, "push init failed: %s", esp_err_to_name(e));
         return e;
+    }
+
+    extern void ip_announcer_on_ip_event(void *arg, esp_event_base_t base,
+                                         int32_t id, void *data);
+    esp_err_t reg_e = esp_event_handler_register(IP_EVENT, IP_EVENT_STA_GOT_IP,
+                                                 ip_announcer_on_ip_event, NULL);
+    if (reg_e == ESP_ERR_INVALID_STATE) {
+        // Default loop already created by provisioning. Some IDF versions
+        // surface this; ignore — handler still registers via the existing loop.
+        ESP_LOGD(TAG, "esp_event_handler_register: default loop already exists");
+    } else if (reg_e != ESP_OK) {
+        ESP_LOGE(TAG, "event handler register failed: %s",
+                 esp_err_to_name(reg_e));
+        return reg_e;
     }
     return ESP_OK;
 }
