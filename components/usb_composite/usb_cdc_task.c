@@ -219,6 +219,18 @@ static void handle_frame(const uint8_t *data, size_t len)
         ctrl_cmd_t c = { .kind = CTRL_CMD_SAVE_PWM_FREQ };
         control_task_post(&c, 0);
     } break;
+    case USB_CDC_OP_SAVE_UI_STEPS: {
+        if (plen < 6) break;  // 4 B float + 2 B u16
+        float    duty_step;
+        uint16_t freq_step;
+        memcpy(&duty_step, &payload[0], 4);
+        memcpy(&freq_step, &payload[4], 2);
+        ctrl_cmd_t c = {
+            .kind = CTRL_CMD_SAVE_UI_STEPS,
+            .save_ui_steps = { .duty_step = duty_step, .freq_step = freq_step },
+        };
+        control_task_post(&c, 0);
+    } break;
     default:
         ESP_LOGW(TAG, "unknown CDC op 0x%02x", op);
         break;

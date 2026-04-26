@@ -158,7 +158,18 @@ void tud_hid_set_report_cb(uint8_t instance, uint8_t report_id,
             control_task_post(&c, 0);
         } break;
         case USB_HID_SAVE_OP_UI_STEPS: {
-            // wired in Phase 3 task 3.4
+            // payload (post report-id strip): [0]=op, [1]=pad0, [2..3]=duty_step_x100, [4..5]=freq_step
+            uint16_t duty_x100, freq_step;
+            memcpy(&duty_x100, &buffer[2], 2);
+            memcpy(&freq_step, &buffer[4], 2);
+            ctrl_cmd_t c = {
+                .kind = CTRL_CMD_SAVE_UI_STEPS,
+                .save_ui_steps = {
+                    .duty_step = (float)duty_x100 / 100.0f,
+                    .freq_step = freq_step,
+                },
+            };
+            control_task_post(&c, 0);
         } break;
         default:
             ESP_LOGW(TAG, "unknown settings_save op 0x%02x", op);
