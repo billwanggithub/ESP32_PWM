@@ -397,6 +397,26 @@
 
     let current = defaultValue;
 
+    // Pointer/keyboard interaction tracking for the slider.
+    // Why: `document.activeElement === slider` is unreliable for mouse drag —
+    // some browsers don't focus range inputs on pointerdown, so telemetry
+    // would overwrite slider.value mid-drag and yank the thumb back.
+    let interacting = false;
+
+    // Optimistic UI gate. Commit-to-echo latency is 50–200 ms (WS RTT +
+    // ctrl_cmd_queue drain + pwm_gen_set + next 20 Hz telemetry tick). The
+    // 1–4 telemetry frames in that window still carry the OLD device value,
+    // which would write the slider/readout back to the old value and cause
+    // visible flicker between old and new — especially right after release
+    // when the cursor is still on the slider. Suppress fromDevice writes
+    // until either the device echoes a matching value or a timeout elapses
+    // (covers the case where firmware clamps/rejects our commit and we'd
+    // otherwise wait forever).
+    let pendingValue = null;
+    let pendingDeadline = 0;
+    const PENDING_TIMEOUT_MS = 600;
+    const PENDING_EPSILON = 0.05;  // duty=0.1% step, freq matches at integer
+
     // Step input wiring — controls slider step only
     function loadStep() {
       try {
@@ -425,27 +445,71 @@
 
     function setLocal(value, { commit = false, fromDevice = false } = {}) {
       const v = clamp(value, range.min, range.max);
+
+      if (fromDevice) {
+        // While a local commit is pending, ignore stale echoes that don't
+        // match yet — they'd flicker the UI back to the old value. Accept
+        // the moment the device echoes ≈ our committed value, OR after the
+        // timeout (firmware may have clamped/rejected — accept reality).
+        if (pendingValue !== null) {
+          const now = performance.now();
+          if (Math.abs(v - pendingValue) <= PENDING_EPSILON || now >= pendingDeadline) {
+            pendingValue = null;
+          } else {
+            return; // suppress: don't touch current, slider, or readout
+          }
+        }
+        // Don't fight an active drag either.
+        if (interacting || document.activeElement === slider) return;
+      }
+
       current = v;
       readout.value = formatReadout(v);
-      // Preserve focus inside readout: only update slider if it's not being dragged
-      if (document.activeElement !== slider) {
-        slider.value = String(valueToSlider(v));
-      }
+      slider.value = String(valueToSlider(v));
       if (onValueChanged) onValueChanged(v);
-      if (commit && !fromDevice) onCommit(v);
+
+      if (commit && !fromDevice) {
+        pendingValue = v;
+        pendingDeadline = performance.now() + PENDING_TIMEOUT_MS;
+        onCommit(v);
+      }
     }
 
-    // Slider — fires on release (change), drag uses input for live readout
+    // Slider — fires on release (via commitFromSlider below), drag uses
+    // input for live readout. pointerdown + keydown/keyup + blur cover
+    // mouse + keyboard. Touch events (touchstart/touchend/touchcancel)
+    // are listened separately because mobile browsers (notably iOS
+    // Safari) don't always fire matching pointer events for range
+    // inputs, and may fire pointercancel mid-drag if the gesture is
+    // ambiguous. We deliberately do NOT clear `interacting` on
+    // pointercancel — that meant "browser hijacked the gesture" and
+    // would reopen the suppression gate while the user is still touching.
+    slider.addEventListener('pointerdown',  () => { interacting = true; });
+    slider.addEventListener('keydown',      () => { interacting = true; });
+    slider.addEventListener('keyup',        () => { interacting = false; });
+    slider.addEventListener('blur',         () => { interacting = false; });
+    slider.addEventListener('touchstart',   () => { interacting = true; }, { passive: true });
+    slider.addEventListener('touchcancel',  () => { interacting = false; }, { passive: true });
+    // pointerup + touchend clear `interacting` via commitFromSlider below.
     slider.addEventListener('input', () => {
       const v = sliderToValue(parseFloat(slider.value));
       readout.value = formatReadout(v);
       current = clamp(v, range.min, range.max);
       if (onValueChanged) onValueChanged(current);
     });
-    slider.addEventListener('change', () => {
+
+    // Commit on release. iOS Safari fires `change` on range inputs
+    // inconsistently — sometimes not at all if the touch is interpreted
+    // as a tap. So we also commit on pointerup and touchend. The
+    // pendingValue gate dedupes back-to-back commits with the same value.
+    const commitFromSlider = () => {
+      interacting = false;
       const v = sliderToValue(parseFloat(slider.value));
       setLocal(v, { commit: true });
-    });
+    };
+    slider.addEventListener('change',    commitFromSlider);
+    slider.addEventListener('pointerup', commitFromSlider);
+    slider.addEventListener('touchend',  commitFromSlider);
 
     // Readout — commit on Enter or blur
     readout.addEventListener('keydown', (ev) => {
