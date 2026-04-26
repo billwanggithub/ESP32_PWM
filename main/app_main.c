@@ -21,6 +21,7 @@
 #include "ota_core.h"
 #include "ui_settings.h"
 #include "usb_composite.h"
+#include "ip_announcer.h"
 
 static const char *TAG = "app";
 
@@ -569,6 +570,11 @@ void app_main(void)
     }
 
     ESP_ERROR_CHECK(ui_settings_init());
+
+    // IP Announcer must init BEFORE net_dashboard so its IP_EVENT
+    // handler is registered before provisioning fires the first
+    // IP_EVENT_STA_GOT_IP.
+    ESP_ERROR_CHECK(ip_announcer_init());
 
     // USB composite on the native USB2 port (GPIO19/20). Requires the
     // board's USB-OTG 0 Ω jumper to be bridged.

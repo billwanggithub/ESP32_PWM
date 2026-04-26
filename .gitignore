@@ -26,3 +26,6 @@ Thumbs.db
 
 # Git worktrees (isolated branches, never tracked)
 .worktrees/
+
+# Per-developer Kconfig overrides (private ntfy topic etc.)
+sdkconfig.defaults.local

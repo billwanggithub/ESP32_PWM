@@ -11,6 +11,7 @@ idf_component_register(
                 gpio_io
                 psu_driver
                 ui_settings
+                ip_announcer
                 esp_event
                 esp_timer
                 console

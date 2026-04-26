@@ -1,0 +1,27 @@
+menu "IP Announcer (ntfy)"
+
+config APP_IP_ANNOUNCER_TOPIC_DEFAULT
+    string "Default ntfy topic (empty = auto-generate random)"
+    default ""
+    help
+        Topic name pushed to ntfy.sh on every IP_EVENT_STA_GOT_IP.
+        WARNING: this is your channel's de-facto password — anyone
+        who reads this string from your repo can subscribe and see
+        every IP this device pushes. Either:
+          - Leave empty: each board generates a private random topic
+            on first boot. Recommended for shared / public builds.
+          - Set in sdkconfig.defaults.local (gitignored): all boards
+            from your private build share one topic. Convenient for
+            multi-board ownership; do NOT commit this file.
+        Topics that look like a placeholder ("CHANGE-ME-*", or fewer
+        than 16 chars after trimming) refuse to push at runtime and
+        the dashboard surfaces a red warning.
+
+config APP_IP_ANNOUNCER_SERVER_DEFAULT
+    string "Default ntfy server hostname"
+    default "ntfy.sh"
+    help
+        Hostname only, no scheme, no path. Override at runtime via
+        the dashboard / CLI for self-hosted ntfy instances.
+
+endmenu
