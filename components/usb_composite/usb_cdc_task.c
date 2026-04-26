@@ -207,6 +207,14 @@ static void handle_frame(const uint8_t *data, size_t len)
         };
         control_task_post(&c, 0);
     } break;
+    case USB_CDC_OP_SAVE_RPM_PARAMS: {
+        ctrl_cmd_t c = { .kind = CTRL_CMD_SAVE_RPM_PARAMS };
+        control_task_post(&c, 0);
+    } break;
+    case USB_CDC_OP_SAVE_RPM_TIMEOUT: {
+        ctrl_cmd_t c = { .kind = CTRL_CMD_SAVE_RPM_TIMEOUT };
+        control_task_post(&c, 0);
+    } break;
     default:
         ESP_LOGW(TAG, "unknown CDC op 0x%02x", op);
         break;

@@ -118,6 +118,13 @@ typedef struct __attribute__((packed)) {
 
 #define USB_CDC_PSU_SLAVE_MAGIC       0xA5
 
+// ---- Settings save (CDC SLIP) ---------------------------------------------
+
+#define USB_CDC_OP_SAVE_PWM_FREQ      0x50   // payload: u32 freq_hz (advisory; device uses live freq)
+#define USB_CDC_OP_SAVE_RPM_PARAMS    0x51   // payload: empty
+#define USB_CDC_OP_SAVE_RPM_TIMEOUT   0x52   // payload: empty
+#define USB_CDC_OP_SAVE_UI_STEPS      0x53   // payload: float duty_step + u16 freq_step
+
 #ifdef __cplusplus
 }
 #endif
