@@ -403,18 +403,40 @@ Design notes:
   in `usb_composite.c:49` keep the two in sync — any future descriptor
   edit triggers a compile error on mismatch.
 
-## PSU Modbus-RTU master (5th controllable subsystem)
+## PSU driver — multi-family (5th controllable subsystem)
 
-Hand-rolled RTU master targeting the Riden RD60xx family (RD6006 / RD6012 /
-RD6018). UART1 @ 19200-8N1 on GPIO 38 / 39 (Kconfig overridable). One
-peripheral driver, four frontends — same single-handler invariant as PWM,
-RPM, GPIO, and the relay power switch:
+`components/psu_driver/` owns UART1 and dispatches to one of three PSU
+backends at boot, picked by the NVS key `psu_driver/family` (default
+from Kconfig `APP_PSU_DEFAULT_FAMILY_*`):
+
+- **`riden`** — Riden RD60xx (Modbus-RTU, factory baud 115200, register
+  map in `psu_riden.c`).
+- **`xy_sk120`** — XY-SK120 (Modbus-RTU, factory baud 115200, register
+  map in `psu_xy_sk120.c`).
+- **`wz5005`** — WZ5005 (custom 20-byte sum-checksum protocol, factory
+  baud 19200, op codes in `psu_wz5005.c`).
+
+`APP_PSU_UART_BAUD` defaults track the family's factory baud; bench
+operators with re-keyed panels override per-build via
+`idf.py menuconfig` → "PSU driver". The two Modbus-RTU backends share
+`psu_modbus_rtu.c` (CRC-16, FC 0x03/0x06 helpers); WZ5005 is fully
+standalone. One UART mutex shared by all backends.
+
+Switching family at runtime: dashboard PSU panel → Family dropdown →
+Save → Reboot button (or `psu_family <name>` CLI + manual reboot).
+The change is NVS-persisted but boot-effective (re-init UART for new
+baud is risky vs simple reboot).
+
+Same single-handler invariant as PWM, RPM, GPIO, and the relay power
+switch:
 
 ```text
 Wi-Fi WS  set_psu_voltage / current / output / slave  ──┐
-USB HID 0x05 + ops 0x10..0x13                            ├──► control_task ──► psu_modbus_set_*()
-USB CDC ops 0x40..0x43                                   │
-CLI psu_v / psu_i / psu_out / psu_slave                  ──┘
+USB HID 0x05 + ops 0x10..0x13                            ├──► control_task ──► psu_driver_set_*()
+USB CDC ops 0x40..0x43                                   │                          │
+CLI psu_v / psu_i / psu_out / psu_slave / psu_family     ──┘                          ▼
+                                                                          backend vtable
+                                                                          (riden / xy_sk120 / wz5005)
 ```
 
 Telemetry (V_SET / I_SET / V_OUT / I_OUT / output) polled at 5 Hz,
@@ -422,16 +444,19 @@ published as atomic bit-punned floats. Surfaces in the 20 Hz WS status
 frame as a `psu` block, in CDC op `0x44` at 5 Hz, and via `psu_status`
 CLI.
 
-Slave address is NVS-persisted in namespace `psu_modbus`, key
-`slave_addr`. Setting it does **not** issue a Modbus write — the supply's
-own slave address is set from the supply's front panel; firmware just
-matches it.
+Slave address + family are NVS-persisted in namespace `psu_driver`,
+keys `slave_addr` and `family`. Setting either does **not** issue a
+write to the supply — the supply's own slave address (and panel-keyed
+baud, per family) is set from the front panel; firmware just matches
+it. Slave range is 1..255 (Modbus families clamp to 1..247 inside the
+backend; WZ5005 uses the full 1..255).
 
 Hand-rolled (not `esp-modbus`) because we use 2 function codes (0x03 read
-holding, 0x06 write single) and 5 registers (V_SET=0x08, I_SET=0x09,
-V_OUT=0x0A, I_OUT=0x0B, OUTPUT=0x12; MODEL=0x00 for boot detect). Adding
-another component-manager pin alongside `esp_tinyusb` / `mdns` / `cjson`
-would exceed the LoC saved.
+holding, 0x06 write single) for the Modbus families, and a wholly
+different 20-byte custom frame for WZ5005. Adding another component-
+manager pin alongside `esp_tinyusb` / `mdns` / `cjson` would exceed the
+LoC saved. Riden register map in `psu_riden.c`; XY-SK120 register map
+in `psu_xy_sk120.c`; WZ5005 op-code table in `psu_wz5005.c`.
 
 CRC-16 uses poly `0xA001`, init `0xFFFF`, shift-right-after-XOR. There is
 deliberately **no boot-time self-check**: an earlier
@@ -445,10 +470,14 @@ boot-time check unless you have a verified canonical CRC vector AND log
 output before the trap (constructors run before `ESP_LOG` is up, so a
 silent trap is the only failure mode — debug-hostile by construction).
 
-UART access is funnelled through a single mutex (`s_uart_mutex`) so
-setpoint writes from `control_task` (priority 6) and the polling loop on
-`psu_task` (priority 4) cannot interleave bytes on the wire. Inter-frame
-gap is 2 ms (3.5-char @ 19200 ≈ 1.8 ms).
+The same posture applies to WZ5005's sum-mod-256 checksum.
+
+UART access is funnelled through a single mutex (`s_uart_mutex` in
+`psu_driver.c`, exposed to backends via `psu_driver_priv_get_uart_mutex`)
+so setpoint writes from `control_task` (priority 6) and the polling
+loop on `psu_task` (priority 4) cannot interleave bytes on the wire.
+Inter-frame gap is 2 ms for Modbus families (3.5-char @ 19200 ≈ 1.8 ms);
+WZ5005 uses 3 ms.
 
 Link health: 5 consecutive timeouts/CRC failures flips `link_ok` to
 false; first success flips it back. Only state transitions log — avoids
