@@ -20,28 +20,43 @@
 static const char *TAG = "ws";
 
 #define MAX_CLIENTS 4
+// Drop a client after this many consecutive telemetry-frame send failures.
+// Telemetry runs at 20 Hz, so 20 ≈ 1 s of nothing leaving the socket — long
+// enough to ride out brief congestion, short enough that a vanished peer
+// (laptop lid closed, phone screen off, AP roam) doesn't keep its slot.
+#define FAIL_THRESHOLD 20
 static int s_client_fds[MAX_CLIENTS];
+static uint8_t s_client_fail[MAX_CLIENTS];
 static httpd_handle_t s_httpd_for_telemetry;
 
 static void add_client(int fd)
 {
     for (int i = 0; i < MAX_CLIENTS; i++)
-        if (s_client_fds[i] == 0) { s_client_fds[i] = fd; return; }
+        if (s_client_fds[i] == 0) {
+            s_client_fds[i]  = fd;
+            s_client_fail[i] = 0;
+            return;
+        }
 }
 static void remove_client(int fd)
 {
     for (int i = 0; i < MAX_CLIENTS; i++)
-        if (s_client_fds[i] == fd) s_client_fds[i] = 0;
+        if (s_client_fds[i] == fd) {
+            s_client_fds[i]  = 0;
+            s_client_fail[i] = 0;
+        }
 }
 
-static void ws_send_json_to(int fd, const char *payload)
+// Returns ESP_OK on success, or the underlying httpd error so the caller
+// can age the fd's fail counter.
+static esp_err_t ws_send_json_to(int fd, const char *payload)
 {
     httpd_ws_frame_t f = {
         .type    = HTTPD_WS_TYPE_TEXT,
         .payload = (uint8_t *)payload,
         .len     = strlen(payload),
     };
-    httpd_ws_send_frame_async(s_httpd_for_telemetry, fd, &f);
+    return httpd_ws_send_frame_async(s_httpd_for_telemetry, fd, &f);
 }
 
 static void handle_json(cJSON *root, int fd)
@@ -275,7 +290,18 @@ static void telemetry_task(void *arg)
         }
 
         for (int i = 0; i < MAX_CLIENTS; i++) {
-            if (s_client_fds[i] != 0) ws_send_json_to(s_client_fds[i], payload);
+            int fd = s_client_fds[i];
+            if (fd == 0) continue;
+            esp_err_t err = ws_send_json_to(fd, payload);
+            if (err == ESP_OK) {
+                s_client_fail[i] = 0;
+            } else if (++s_client_fail[i] >= FAIL_THRESHOLD) {
+                // Peer is gone or stuck — ask httpd to tear the session
+                // down. Its sess_delete path invokes ws_on_client_closed,
+                // which clears the slot.
+                ESP_LOGW(TAG, "ws fd=%d unresponsive, closing", fd);
+                httpd_sess_trigger_close(s_httpd_for_telemetry, fd);
+            }
         }
     }
 }
