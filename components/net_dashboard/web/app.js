@@ -88,6 +88,9 @@
       psu_slave_lbl: 'Slave addr',
       psu_save: 'Save',
       psu_offline: 'PSU offline',
+      psu_family_lbl: 'Family',
+      psu_reboot: 'Reboot',
+      psu_family_pending: 'reboot to apply',
     },
     'zh-Hant': {
       app_title: 'Fan-TestKit 儀表板',
@@ -171,6 +174,9 @@
       psu_slave_lbl: '從機位址',
       psu_save: '儲存',
       psu_offline: 'PSU 離線',
+      psu_family_lbl: '型號',
+      psu_reboot: '重新開機',
+      psu_family_pending: '重開後生效',
     },
     'zh-Hans': {
       app_title: 'Fan-TestKit 仪表板',
@@ -254,6 +260,9 @@
       psu_slave_lbl: '从机地址',
       psu_save: '保存',
       psu_offline: 'PSU 离线',
+      psu_family_lbl: '型号',
+      psu_reboot: '重新开机',
+      psu_family_pending: '重启后生效',
     },
   };
 
@@ -822,6 +831,13 @@
     const outOnBtn   = document.getElementById('psu-out-on');
     const slaveInput = document.getElementById('psu-slave-input');
     const slaveBtn   = document.getElementById('psu-slave-save');
+    const familySelect  = document.getElementById('psu-family-select');
+    const familySave    = document.getElementById('psu-family-save');
+    const familyPending = document.getElementById('psu-family-pending');
+    const rebootBtn     = document.getElementById('psu-reboot');
+
+    let liveFamily = null;       // last value seen on telemetry
+    let pendingFamily = null;    // last value the user pushed
 
     if (!panelEl) {
       // HTML not present — defensive no-op so older builds don't crash.
@@ -849,9 +865,28 @@
 
     slaveBtn.addEventListener('click', () => {
       const a = parseInt(slaveInput.value, 10);
-      if (!(a >= 1 && a <= 247)) return;
+      if (!(a >= 1 && a <= 255)) return;
       send({ type: 'set_psu_slave', addr: a });
     });
+
+    if (familySave) {
+      familySave.addEventListener('click', () => {
+        const want = familySelect.value;
+        send({ type: 'set_psu_family', family: want });
+        pendingFamily = want;
+        if (familyPending) {
+          familyPending.textContent = t('psu_family_pending');
+          familyPending.hidden = false;
+        }
+      });
+    }
+
+    if (rebootBtn) {
+      rebootBtn.addEventListener('click', () => {
+        if (!confirm('Reboot the device?')) return;
+        send({ type: 'reboot' });
+      });
+    }
 
     // Don't yank the slider out from under the user during interaction.
     let userInteractingV = false, userInteractingI = false;
@@ -894,6 +929,16 @@
         iOutEl.textContent = (+psu.i_out).toFixed(3);
         outOnBtn .classList.toggle('active',  psu.output);
         outOffBtn.classList.toggle('active', !psu.output);
+        if (psu.family) {
+          liveFamily = psu.family;
+          if (familySelect && document.activeElement !== familySelect) {
+            familySelect.value = psu.family;
+          }
+          if (familyPending && pendingFamily && pendingFamily === psu.family) {
+            familyPending.hidden = true;
+            pendingFamily = null;
+          }
+        }
       },
     };
   })();

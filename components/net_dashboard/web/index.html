@@ -222,8 +222,19 @@
       </div>
       <div class="psu-row psu-settings">
         <label data-i18n="psu_slave_lbl">Slave addr</label>
-        <input type="number" id="psu-slave-input" min="1" max="247" value="1" />
+        <input type="number" id="psu-slave-input" min="1" max="255" value="1" />
         <button id="psu-slave-save" data-i18n="psu_save">Save</button>
+      </div>
+      <div class="psu-row psu-settings">
+        <label data-i18n="psu_family_lbl">Family</label>
+        <select id="psu-family-select">
+          <option value="riden">Riden RD60xx</option>
+          <option value="xy_sk120">XY-SK120</option>
+          <option value="wz5005">WZ5005</option>
+        </select>
+        <button id="psu-family-save" data-i18n="psu_save">Save</button>
+        <button id="psu-reboot" class="psu-btn" data-i18n="psu_reboot">Reboot</button>
+        <span id="psu-family-pending" class="psu-pending" hidden></span>
       </div>
     </div>
   </details>

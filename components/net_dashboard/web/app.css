@@ -799,6 +799,11 @@ button.danger[disabled] {
 #psu-panel .psu-row.psu-settings {
   grid-template-columns: 5em 6em auto 1fr;
 }
+.psu-pending {
+  color: var(--warn, #c47);
+  font-size: 0.85em;
+  margin-left: 0.5em;
+}
 #psu-panel .psu-meas {
   font-variant-numeric: tabular-nums;
   opacity: 0.85;
