@@ -71,6 +71,10 @@ static void control_task(void *arg)
             esp_err_t e = rpm_cap_save_timeout_to_nvs();
             if (e != ESP_OK) ESP_LOGW(TAG, "save_rpm_timeout failed: %s", esp_err_to_name(e));
         } break;
+        case CTRL_CMD_SAVE_PWM_FREQ: {
+            esp_err_t e = pwm_gen_save_current_freq_to_nvs();
+            if (e != ESP_OK) ESP_LOGW(TAG, "save_pwm_freq failed: %s", esp_err_to_name(e));
+        } break;
         case CTRL_CMD_GPIO_SET_MODE: {
             esp_err_t e = gpio_io_set_mode(cmd.gpio_set_mode.idx,
                                            (gpio_io_mode_t)cmd.gpio_set_mode.mode);
