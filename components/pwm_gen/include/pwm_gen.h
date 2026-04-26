@@ -35,6 +35,14 @@ void pwm_gen_get(uint32_t *freq_hz, float *duty_pct);
 // the 2-band dynamic resolution table (HI=10 MHz, LO=320 kHz).
 uint8_t pwm_gen_duty_resolution_bits(uint32_t freq_hz);
 
+// Read previously-saved freq from NVS. Returns fallback_hz if the key is
+// missing or out of [PWM_GEN_FREQ_MIN_HZ, PWM_GEN_FREQ_MAX_HZ].
+uint32_t pwm_gen_load_saved_freq(uint32_t fallback_hz);
+
+// Persist the currently-active freq (read via pwm_gen_get) to NVS. Duty is
+// intentionally NOT persisted — boot always starts at duty=0.
+esp_err_t pwm_gen_save_current_freq_to_nvs(void);
+
 #ifdef __cplusplus
 }
 #endif

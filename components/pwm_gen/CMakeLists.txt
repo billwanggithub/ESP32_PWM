@@ -7,6 +7,7 @@ idf_component_register(
                 esp_driver_gpio
                 esp_timer
                 log
+                nvs_flash
     PRIV_REQUIRES esp_hal_mcpwm
                   hal
                   soc

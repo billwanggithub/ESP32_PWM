@@ -11,6 +11,10 @@
 #include "freertos/task.h"
 #include "hal/mcpwm_ll.h"
 #include "soc/mcpwm_struct.h"
+#include "nvs.h"
+
+#define PWM_NVS_NAMESPACE  "pwm_gen"
+#define PWM_NVS_KEY_FREQ   "freq_hz"
 
 // MCPWM 的 timer counter 是 16-bit（MCPWM_LL_MAX_COUNT_VALUE = 0x10000），所以
 // period_ticks 必須 ∈ [2, 65535]。一個固定 resolution_hz 覆蓋不了 10 Hz ~ 1 MHz，
@@ -311,4 +315,32 @@ void pwm_gen_get(uint32_t *freq_hz, float *duty_pct)
 {
     if (freq_hz)  *freq_hz  = s_pwm.freq_hz;
     if (duty_pct) *duty_pct = s_pwm.duty_pct;
+}
+
+uint32_t pwm_gen_load_saved_freq(uint32_t fallback_hz)
+{
+    nvs_handle_t h;
+    if (nvs_open(PWM_NVS_NAMESPACE, NVS_READONLY, &h) != ESP_OK) return fallback_hz;
+    uint32_t f = fallback_hz;
+    (void)nvs_get_u32(h, PWM_NVS_KEY_FREQ, &f);
+    nvs_close(h);
+    if (f < PWM_GEN_FREQ_MIN_HZ || f > PWM_GEN_FREQ_MAX_HZ) return fallback_hz;
+    return f;
+}
+
+esp_err_t pwm_gen_save_current_freq_to_nvs(void)
+{
+    uint32_t f; float d;
+    pwm_gen_get(&f, &d);
+    if (f < PWM_GEN_FREQ_MIN_HZ || f > PWM_GEN_FREQ_MAX_HZ) return ESP_ERR_INVALID_STATE;
+    nvs_handle_t h;
+    esp_err_t e = nvs_open(PWM_NVS_NAMESPACE, NVS_READWRITE, &h);
+    if (e != ESP_OK) return e;
+    esp_err_t es = nvs_set_u32(h, PWM_NVS_KEY_FREQ, f);
+    esp_err_t ec = (es == ESP_OK) ? nvs_commit(h) : ESP_OK;
+    nvs_close(h);
+    if (es != ESP_OK) return es;
+    if (ec != ESP_OK) return ec;
+    ESP_LOGI(TAG, "saved to NVS: freq_hz=%lu", (unsigned long)f);
+    return ESP_OK;
 }
