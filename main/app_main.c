@@ -109,6 +109,18 @@ static int cmd_save_rpm_timeout(int argc, char **argv)
     return 0;
 }
 
+// ---- CLI: save_pwm_freq ----------------------------------------------------
+static struct { struct arg_end *end; } s_save_pwm_freq_args;
+static int cmd_save_pwm_freq(int argc, char **argv)
+{
+    (void)argc; (void)argv;
+    ctrl_cmd_t c = { .kind = CTRL_CMD_SAVE_PWM_FREQ };
+    esp_err_t e = control_task_post(&c, pdMS_TO_TICKS(50));
+    if (e != ESP_OK) { printf("post failed: %s\n", esp_err_to_name(e)); return 1; }
+    printf("save_pwm_freq queued\n");
+    return 0;
+}
+
 // ---- CLI: gpio_mode <idx> <mode> -------------------------------------------
 
 static struct {
@@ -363,6 +375,13 @@ static void register_commands(void)
         .hint = NULL, .func = cmd_save_rpm_timeout, .argtable = &s_save_rpm_timeout_args,
     };
     ESP_ERROR_CHECK(esp_console_cmd_register(&srt_cmd));
+
+    s_save_pwm_freq_args.end = arg_end(0);
+    const esp_console_cmd_t spf_cmd = {
+        .command = "save_pwm_freq", .help = "persist current PWM freq to NVS",
+        .hint = NULL, .func = cmd_save_pwm_freq, .argtable = &s_save_pwm_freq_args,
+    };
+    ESP_ERROR_CHECK(esp_console_cmd_register(&spf_cmd));
 
     s_gpio_mode_args.idx  = arg_int1(NULL, NULL, "<idx>",  "GPIO index 0..15");
     s_gpio_mode_args.mode = arg_str1(NULL, NULL, "<mode>", "i_pd|i_pu|i_fl|o");
