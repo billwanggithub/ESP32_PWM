@@ -158,14 +158,110 @@ under *PSU driver* (separate menu).
 - **IP Announcer (ntfy.sh push)** — opt-in feature that pushes the
   device's IP to your phone via ntfy.sh after every Wi-Fi connection.
   Solves the "Android Chrome can't resolve `fan-testkit.local` on a
-  phone hotspot with randomised subnet" problem. Install the ntfy
-  Android / iOS app, subscribe to your auto-generated topic (shown on
-  the captive-portal success page), enable from Settings → IP
-  Announcer in the dashboard. Topic resolution: NVS → Kconfig
-  `APP_IP_ANNOUNCER_TOPIC_DEFAULT` (set in `sdkconfig.defaults.local`
-  for personal multi-board builds) → random `fan-testkit-<32 chars>`
-  fallback. Topics matching `CHANGE-ME-*` or shorter than 16 chars
-  are refused at runtime to prevent placeholder leaks.
+  phone hotspot with randomised subnet" problem. Default topic is
+  `fan-testkit-gmt-bench` (shared across every board built from this
+  repo); install the ntfy app, subscribe to that topic, enable from
+  Settings → IP Announcer in the dashboard. Step-by-step verification
+  flow below in **First-time IP Announcer setup**. Topic resolution:
+  NVS → Kconfig `APP_IP_ANNOUNCER_TOPIC_DEFAULT` (override in
+  `sdkconfig.defaults.local` for a different default) → random
+  `fan-testkit-<32 chars>` fallback if Kconfig is empty. Topics
+  matching `CHANGE-ME-*` or shorter than 16 chars are refused at
+  runtime to prevent placeholder leaks.
+
+## First-time IP Announcer setup
+
+Four-step sanity check, ~5 minutes total. Each step has a clear pass
+/ fail signal and the failure mode points at the next step's fix.
+
+### Prerequisites
+
+- ntfy app installed on your phone (Play Store / F-Droid / App Store,
+  developer "Philipp C. Heckel")
+- Notification permission granted to the ntfy app (Android: Settings
+  → Apps → ntfy → Notifications → Allow). **~90 % of "phone never
+  rings" reports are this setting.**
+
+### Step 1 — Verify ntfy.sh end-to-end (no board involved)
+
+In the ntfy app, tap **+** and subscribe to `fan-testkit-gmt-bench`
+(service `ntfy.sh`, no login needed). Then from any browser open:
+
+```text
+https://ntfy.sh/fan-testkit-gmt-bench/publish?message=test1
+```
+
+The browser returns a JSON `{"id":"...","time":...,"event":"message",...}`.
+
+**Expected:** phone shows a `test1` notification within ~3 s.
+
+**If not:** check the topic spelling (`fan-testkit-gmt-bench`, all
+lowercase, hyphens not underscores), confirm notification permission,
+kill-and-restart the ntfy app once. Don't move to Step 2 until this
+works — Step 1 isolates the phone-side problem from the board-side
+problem.
+
+### Step 2 — Verify the board's HTTPS push (manual trigger)
+
+Connect USB1 (CH343P) and open `idf.py monitor` or PuTTY at 115200.
+At the `fan-testkit>` prompt:
+
+```text
+fan-testkit> announcer_enable 1
+fan-testkit> announcer_test
+```
+
+**Expected:** monitor log shows:
+
+```text
+I (xxx) ip_announcer: IP 192.168.x.y — enqueueing push
+I (xxx) ip_ann_push: push ok: 192.168.x.y -> ntfy ntfy.sh/fan-testkit-gmt-bench (HTTP 200)
+```
+
+…and the phone receives a `Fan-TestKit online / IP: 192.168.x.y`
+notification simultaneously.
+
+**If `push ok` but no notification:** topic mismatch between phone and
+firmware (ntfy app subscribed to a different topic). Re-check Step 1.
+
+**If `push attempt N failed: ...`:** see Step 3.
+
+### Step 3 — Diagnose push failures via `last_err`
+
+```text
+fan-testkit> announcer_status
+```
+
+Match the printed `last_err` against this table:
+
+| `last_err` content                         | Meaning                  | Fix                                                                                          |
+|--------------------------------------------|--------------------------|----------------------------------------------------------------------------------------------|
+| `ESP_ERR_HTTP_CONNECT` / `ESP_FAIL`        | No internet              | Wi-Fi reachable but cannot egress port 443. Check router firewall / hotspot data plan.       |
+| `ESP_ERR_ESP_TLS_*`                        | TLS handshake failed     | System time not synced → cert validation rejects. Confirm SNTP runs at boot.                 |
+| `HTTP 401` / `403`                         | Auth required            | ntfy.sh free tier doesn't usually require this. Check server hostname; consider self-host.   |
+| `HTTP 429`                                 | Rate-limited             | Free tier = 5 msg/min, 500/day. Wait 60 s and retry `announcer_test`.                        |
+| `HTTP 4xx` (other)                         | Topic format rejected    | Confirm topic has only `[a-zA-Z0-9_-]` characters.                                           |
+| `topic placeholder; change before enabling`| Safety guard refused     | Topic is `< 16` chars or starts `CHANGE-ME-*`. Set a longer / non-placeholder topic.         |
+
+### Step 4 — Verify automatic cold-boot push
+
+`announcer_status` should show `enable=1`. Power-cycle the board
+(unplug + replug, or press EN). After Wi-Fi reconnects:
+
+**Expected:** phone receives a fresh notification within a few hundred
+ms of the board's `IP_EVENT_STA_GOT_IP` log line.
+
+**If only manual `announcer_test` works but cold boot doesn't:**
+
+- Check the monitor log for `ip_announcer: IP ... — enqueueing push`.
+  - Missing → `enable` didn't persist. Re-run `announcer_enable 1`
+    then `announcer_status` to confirm `enable=1`.
+  - Present but `last_status=failed` → see Step 3.
+
+The board re-announces on every cold boot intentionally, even with an
+unchanged IP — that's the desired UX (every reboot pings "I'm back").
+DHCP renew with the same IP within a single power session is deduped
+and does NOT push twice.
 
 ## Bench DC PSU (UART1)
 

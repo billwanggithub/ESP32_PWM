@@ -106,7 +106,7 @@
       announcer_open_in_app: 'Open in ntfy app',
       announcer_banner_placeholder: 'Topic looks like a placeholder — change it before enabling push.',
       announcer_help_h: 'IP Announcer (ntfy.sh push notifications)',
-      announcer_help_p: 'When enabled, the device pushes its IP to ntfy.sh on every Wi-Fi connection. Install the ntfy app on your phone, subscribe to your topic, and tap the notification to open the dashboard. The topic name acts as a password — anyone with it can read your IP. Use a long, random topic.',
+      announcer_help_p: 'When enabled, the device pushes its IP to ntfy.sh on every Wi-Fi connection. Default topic is <code>fan-testkit-gmt-bench</code> (shared by all boards built from this repo). Install the ntfy app on your phone, subscribe to that topic, and tap the notification to open the dashboard. The topic name acts as a password — anyone with it can read your IP. Step-by-step verification is in README.md → "First-time IP Announcer setup".',
     },
     'zh-Hant': {
       app_title: 'Fan-TestKit 儀表板',
@@ -208,7 +208,7 @@
       announcer_open_in_app: '在 ntfy app 開啟',
       announcer_banner_placeholder: 'Topic 看起來像 placeholder — 啟用推播前請先修改。',
       announcer_help_h: 'IP 通知 (ntfy.sh 推播)',
-      announcer_help_p: '啟用後，每次 Wi-Fi 連線會把 IP 推送到 ntfy.sh。手機裝 ntfy app、訂閱你的 topic、點通知就能直接開 dashboard。Topic 等同密碼 — 任何知道它的人都能看到你推送的 IP，請用夠長夠隨機的字串。',
+      announcer_help_p: '啟用後，每次 Wi-Fi 連線會把 IP 推送到 ntfy.sh。預設 topic 是 <code>fan-testkit-gmt-bench</code>（所有從這份 repo build 出來的板子共用）。手機裝 ntfy app、訂閱該 topic、點通知就能直接開 dashboard。Topic 等同密碼 — 任何知道它的人都能看到你推送的 IP。逐步驗證流程見 README.md 的「First-time IP Announcer setup」一節。',
     },
     'zh-Hans': {
       app_title: 'Fan-TestKit 仪表板',
@@ -310,7 +310,7 @@
       announcer_open_in_app: '在 ntfy app 打开',
       announcer_banner_placeholder: 'Topic 看起来像占位符 — 启用推送前请先修改。',
       announcer_help_h: 'IP 通知 (ntfy.sh 推送)',
-      announcer_help_p: '启用后，每次 Wi-Fi 连接会把 IP 推送到 ntfy.sh。手机装 ntfy app、订阅你的 topic、点通知就能直接打开 dashboard。Topic 等同密码 — 任何知道它的人都能看到你推送的 IP，请用够长够随机的字符串。',
+      announcer_help_p: '启用后，每次 Wi-Fi 连接会把 IP 推送到 ntfy.sh。默认 topic 是 <code>fan-testkit-gmt-bench</code>（所有从这份 repo build 出来的板子共用）。手机装 ntfy app、订阅该 topic、点通知就能直接打开 dashboard。Topic 等同密码 — 任何知道它的人都能看到你推送的 IP。逐步验证流程见 README.md 的「First-time IP Announcer setup」一节。',
     },
   };
 
