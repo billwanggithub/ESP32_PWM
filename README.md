@@ -169,6 +169,19 @@ under *PSU driver* (separate menu).
   matching `CHANGE-ME-*` or shorter than 16 chars are refused at
   runtime to prevent placeholder leaks.
 
+  **⚠️ Topic priority gotcha:** NVS wins over Kconfig. A board that
+  already booted once with an older firmware (random fallback or
+  different Kconfig default) has its topic stored in NVS — flashing
+  a new firmware with a different `APP_IP_ANNOUNCER_TOPIC_DEFAULT`
+  does **not** change the topic on that board, because the boot path
+  takes the NVS fast path and never re-reads Kconfig. The board will
+  still push, but to its old topic name — your ntfy app subscribed
+  to the new default will see nothing. To switch the topic on an
+  already-provisioned board, use one of: (a) dashboard Settings →
+  IP Announcer → change Topic → Save; (b) USB1 REPL `announcer_set
+  <new-topic>`; (c) `idf.py erase-flash` (also wipes Wi-Fi creds —
+  full re-provisioning needed afterwards).
+
 ## First-time IP Announcer setup
 
 Four-step sanity check, ~5 minutes total. Each step has a clear pass
